@@ -6,10 +6,10 @@ set -e
 # =====================
 # Configuración inicial
 # =====================
-SERVER_USER="your_username"    # <- Reemplaza con tu nombre de usuario en el servidor
-INSTALL_PIHOLE="no"            # <- "yes" para instalar Pi-hole, "no" para omitir
-INSTALL_CASAOS="no"            # <- "yes" para instalar CasaOS, "no" para omitir
-AUTO_REBOOT="no"               # <- "yes" para reiniciar automáticamente, "no" para preguntar
+SERVER_USER="marco"    # <- Reemplaza con tu nombre de usuario en el servidor
+INSTALL_PIHOLE="yes"            # <- "yes" para instalar Pi-hole, "no" para omitir
+INSTALL_CASAOS="yes"            # <- "yes" para instalar CasaOS, "no" para omitir
+AUTO_REBOOT="yes"               # <- "yes" para reiniciar automáticamente, "no" para preguntar
 
 # Logging function
 LOG() {
