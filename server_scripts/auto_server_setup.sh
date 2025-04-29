@@ -1,167 +1,177 @@
-cat > auto_server_setup.sh <<'SCRIPT'
-#!/usr/bin/env bash
-# auto_server_setup.sh — Marco G. & ChatGPT — 2025-04-28
-set -euo pipefail
-LOG(){ printf "\n\e[1;32m▶ %s\e[0m\n" "$*"; }
+#!/bin/bash
 
-# -------- Ajusta aquí ----------
-SERVER_USER="${SUDO_USER:-$USER}"   # usuario añadido a docker/zerotier
-INSTALL_PIHOLE="yes"                # "no" para omitir Pi-hole
-INSTALL_CASAOS="yes"                # "no" para omitir CasaOS
-AUTO_REBOOT="yes"                   # "no" para reinicio manual
-# ---------------------------------
+# Exit immediately if a command exits with a non-zero status
+set -e
 
-###################################
-# 1. Base APT + actualizaciones
-###################################
-install_base() {
-  LOG "Actualizando APT y herramientas básicas…"
-  apt update && apt -y full-upgrade
-  apt install -y git curl gnupg lsb-release nano \
-                 ca-certificates software-properties-common \
-                 apt-transport-https
+# =====================
+# Configuración inicial
+# =====================
+SERVER_USER="your_username"    # <- Reemplaza con tu nombre de usuario en el servidor
+INSTALL_PIHOLE="no"            # <- "yes" para instalar Pi-hole, "no" para omitir
+INSTALL_CASAOS="no"            # <- "yes" para instalar CasaOS, "no" para omitir
+AUTO_REBOOT="no"               # <- "yes" para reiniciar automáticamente, "no" para preguntar
+
+# Logging function
+LOG() {
+    echo -e "[`date +'%Y-%m-%d %H:%M:%S'`] $@"
 }
 
-###################################
-# 2. Zsh + Oh-My-Zsh + autosuggestions
-###################################
-install_shell() {
-  LOG "Instalando Zsh y Oh-My-Zsh…"
-  apt install -y zsh
-  RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-  git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions \
-      "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-  sed -i 's/^plugins=(\(.*\))/plugins=(\1 zsh-autosuggestions)/' "${HOME}/.zshrc"
-  chsh -s "$(command -v zsh)" "$SERVER_USER"
+# Comprueba que el script se esté ejecutando como root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Por favor, ejecuta este script como root o con sudo."
+    exit 1
+fi
+
+if ! id "$SERVER_USER" >/dev/null 2>&1; then
+    echo "Usuario $SERVER_USER no encontrado. Por favor verifica la configuración de SERVER_USER."
+    exit 1
+fi
+
+# Función para instalar paquetes base
+install_base_packages() {
+    LOG "Instalando paquetes base..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt update && apt upgrade -y
+    apt install -y build-essential curl wget git ufw snapd lsb-release apt-transport-https ca-certificates gnupg
 }
 
-###################################
-# 3. Utilidades extra (fzf, btop)
-###################################
-install_utils() {
-  LOG "Instalando fzf y btop…"
-  apt install -y fzf btop
+# Función para instalar Zsh, Oh-My-Zsh, y zsh-autosuggestions
+install_zsh_ohmyzsh() {
+    LOG "Instalando Zsh y Oh-My-Zsh..."
+    apt install -y zsh
+    
+    # Instalar Oh-My-Zsh para el usuario especificado
+    sudo -H -u "$SERVER_USER" bash -c "mkdir -p /tmp && curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o /tmp/install-ohmyzsh.sh"
+    sudo -H -u "$SERVER_USER" bash -c "bash /tmp/install-ohmyzsh.sh --unattended"
+    
+    # Cambiar el shell predeterminado del usuario a zsh
+    chsh -s "$(which zsh)" "$SERVER_USER"
+    
+    # Instalar plugin zsh-autosuggestions
+    LOG "Instalando complemento zsh-autosuggestions..."
+    sudo -H -u "$SERVER_USER" git clone https://github.com/zsh-users/zsh-autosuggestions "/home/$SERVER_USER/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    
+    # Habilitar el plugin zsh-autosuggestions en el .zshrc del usuario
+    sudo -H -u "$SERVER_USER" sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions)/' "/home/$SERVER_USER/.zshrc"
 }
 
-###################################
-# 4. Certbot (Let’s Encrypt)
-###################################
+# Función para instalar fzf y btop
+install_fzf_btop() {
+    LOG "Instalando fzf y btop..."
+    apt install -y fzf btop
+}
+
+# Función para instalar Certbot mediante snap
 install_certbot() {
-  LOG "Instalando Certbot (snap)…"
-  snap install core --classic >/dev/null
-  snap install certbot --classic
-  ln -sf /snap/bin/certbot /usr/bin/certbot
+    LOG "Instalando Certbot (snap)..."
+    # Asegurarse de que snap core esté instalado y actualizado
+    snap install core || true
+    snap refresh core
+    # Instalar Certbot
+    snap install --classic certbot
+    ln -s /snap/certbot/current/bin/certbot /usr/bin/certbot || true
 }
 
-###################################
-# 5. Docker Engine + compose-plugin
-###################################
+# Función para instalar Docker Engine y docker-compose plugin
 install_docker() {
-  LOG "Instalando Docker Engine…"
-  install -m0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-       gpg --dearmor -o /etc/apt/keyrings/docker.asc
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
-       tee /etc/apt/sources.list.d/docker.list >/dev/null
-  apt update
-  apt install -y docker-ce docker-ce-cli containerd.io \
-                 docker-buildx-plugin docker-compose-plugin
-  usermod -aG docker "$SERVER_USER"
+    LOG "Instalando Docker Engine y Docker Compose Plugin..."
+    # Desinstalar versiones antiguas de Docker si existen
+    apt remove -y docker docker.io containerd runc || true
+    
+    # Instalar paquetes de soporte
+    apt install -y ca-certificates curl gnupg
+    
+    # Agregar clave GPG oficial de Docker
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    
+    # Agregar repositorio de Docker
+    source /etc/os-release
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" > /etc/apt/sources.list.d/docker.list
+    
+    # Instalar Docker Engine, CLI, Containerd, Buildx y Compose
+    apt update
+    apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    
+    # Agregar el usuario al grupo docker para evitar usar sudo con Docker
+    usermod -aG docker "$SERVER_USER" || true
+    LOG "Docker Engine y Docker Compose instalados."
 }
 
-###################################
-# 6. ZeroTier One
-###################################
+# Función para instalar ZeroTier One
 install_zerotier() {
-  LOG "Instalando ZeroTier…"
-  curl -s https://install.zerotier.com | bash
-  usermod -aG zerotier-one "$SERVER_USER"
-  systemctl enable --now zerotier-one
+    LOG "Instalando ZeroTier One..."
+    curl -fsSL https://install.zerotier.com | bash
 }
 
-###################################
-# 7. Portainer
-###################################
+# Función para desplegar Portainer en un contenedor Docker
 install_portainer() {
-  LOG "Desplegando Portainer CE…"
-  docker volume create portainer_data
-  docker run -d --name portainer \
-    -p 8000:8000 -p 9443:9443 \
-    --restart=always \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v portainer_data:/data \
-    portainer/portainer-ce:latest
+    LOG "Desplegando Portainer (contenedor Docker)..."
+    docker volume create portainer_data || true
+    docker run -d \
+        -p 8000:8000 -p 9000:9000 -p 9443:9443 \
+        --name portainer --restart=always \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v portainer_data:/data \
+        portainer/portainer-ce:latest
 }
 
-###################################
-# 8. CasaOS (opcional)
-###################################
+# Función opcional para instalar CasaOS
 install_casaos() {
-  [[ "$INSTALL_CASAOS" == "no" ]] && return
-  LOG "Instalando CasaOS…"
-  curl -fsSL https://get.casaos.io | bash
-}
-
-###################################
-# 9. Pi-hole (opcional)
-###################################
-install_pihole() {
-  [[ "$INSTALL_PIHOLE" == "no" ]] && return
-  LOG "Instalando Pi-hole… (modo unattended)"
-  export PIHOLE_SKIP_OS_CHECK=true
-  curl -sSL https://install.pi-hole.net | bash
-}
-
-###################################
-# 10. Plex Media Server (nativo)
-###################################
-install_plex() {
-  LOG "Instalando Plex Media Server…"
-  install -m0755 -d /etc/apt/keyrings
-  curl https://downloads.plex.tv/plex-keys/PlexSign.key | \
-       gpg --dearmor -o /etc/apt/keyrings/plex.asc
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/plex.asc] \
-https://downloads.plex.tv/repo/deb public main" | \
-       tee /etc/apt/sources.list.d/plexmediaserver.list >/dev/null
-  apt update
-  apt install -y plexmediaserver
-  systemctl enable --now plexmediaserver
-}
-
-############################
-# Ejecución en cascada
-############################
-main() {
-  install_base
-  install_shell
-  install_utils
-  install_certbot
-  install_docker
-  install_zerotier
-  install_portainer
-  install_casaos
-  install_pihole
-  install_plex
-
-  LOG \"Instalación completa.\"
-  LOG \"Accesos:\\n  • Portainer → https://<IP>:9443\\n  • CasaOS → http://<IP>\\n  • Plex → http://<IP>:32400/web\\n  • Pi-hole → http://<IP>/admin\"
-
-  if [[ \"$AUTO_REBOOT\" == \"yes\" ]]; then
-    LOG \"Reiniciando en 10 s… (Ctrl-C para abortar)\"
-    sleep 10 && reboot
-  else
-    printf \"\\n¿Deseas reiniciar ahora? [y/N]: \"
-    read -r REPLY
-    if [[ ${REPLY,,} == \"y\" ]]; then
-      LOG \"Reiniciando…\"
-      reboot
-    else
-      LOG \"No se reinició. Hazlo manualmente cuando quieras.\"
+    if [ "$INSTALL_CASAOS" = "yes" ]; then
+        LOG "Instalando CasaOS..."
+        curl -fsSL https://get.casaos.io | bash
     fi
-  fi
 }
 
-main \"$@\"
-SCRIPT
-chmod +x auto_server_setup.sh
+# Función opcional para instalar Pi-hole
+install_pihole() {
+    if [ "$INSTALL_PIHOLE" = "yes" ]; then
+        LOG "Instalando Pi-hole (puede tardar unos minutos)..."
+        curl -fsSL https://install.pi-hole.net | bash -s -- --unattended
+    fi
+}
+
+# Función para instalar Plex Media Server
+install_plex() {
+    LOG "Instalando Plex Media Server..."
+    # Agregar clave y repositorio de Plex
+    curl -fsSL https://downloads.plex.tv/plex-keys/PlexSign.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/plex.gpg
+    echo "deb [signed-by=/etc/apt/trusted.gpg.d/plex.gpg] https://downloads.plex.tv/repo/deb/ public main" > /etc/apt/sources.list.d/plexmediaserver.list
+    apt update
+    apt install -y plexmediaserver
+}
+
+# Función principal para ejecutar todas las instalaciones
+main_setup() {
+    install_base_packages
+    install_zsh_ohmyzsh
+    install_fzf_btop
+    install_certbot
+    install_docker
+    install_zerotier
+    install_portainer
+    install_casaos
+    install_pihole
+    install_plex
+    
+    LOG "Configuración finalizada."
+    if [ "$AUTO_REBOOT" = "yes" ]; then
+        LOG "Reiniciando el sistema en 5 segundos..."
+        sleep 5
+        reboot
+    else
+        echo -n "¿Desea reiniciar el servidor ahora? (s/N): "
+        read -r CONFIRM
+        if [[ "$CONFIRM" =~ ^([sS][iI]?|[yY])$ ]]; then
+            LOG "Reiniciando el sistema..."
+            sleep 2
+            reboot
+        else
+            LOG "Instalación completada. Reinicia manualmente para aplicar los cambios."
+        fi
+    fi
+}
+
+# Ejecutar el proceso principal
+main_setup
