@@ -1,3 +1,4 @@
+cat > auto_server_setup.sh <<'SCRIPT'
 #!/usr/bin/env bash
 # auto_server_setup.sh — Marco G. & ChatGPT — 2025-04-28
 set -euo pipefail
@@ -143,22 +144,24 @@ main() {
   install_pihole
   install_plex
 
-  LOG "Instalación completa."
-  LOG "Accesos:\n  • Portainer → https://<IP>:9443\n  • CasaOS → http://<IP>\n  • Plex → http://<IP>:32400/web\n  • Pi-hole → http://<IP>/admin"
+  LOG \"Instalación completa.\"
+  LOG \"Accesos:\\n  • Portainer → https://<IP>:9443\\n  • CasaOS → http://<IP>\\n  • Plex → http://<IP>:32400/web\\n  • Pi-hole → http://<IP>/admin\"
 
-  if [[ "$AUTO_REBOOT" == "yes" ]]; then
-    LOG "Reiniciando en 10 s…  (Ctrl-C para abortar)"
+  if [[ \"$AUTO_REBOOT\" == \"yes\" ]]; then
+    LOG \"Reiniciando en 10 s… (Ctrl-C para abortar)\"
     sleep 10 && reboot
   else
-    printf "\n¿Deseas reiniciar ahora? [y/N]: "
+    printf \"\\n¿Deseas reiniciar ahora? [y/N]: \"
     read -r REPLY
-    if [[ ${REPLY,,} == "y" ]]; then
-      LOG "Reiniciando…"
+    if [[ ${REPLY,,} == \"y\" ]]; then
+      LOG \"Reiniciando…\"
       reboot
     else
-      LOG "No se reinició. Hazlo manualmente cuando quieras."
+      LOG \"No se reinició. Hazlo manualmente cuando quieras.\"
     fi
   fi
 }
 
 main \"$@\"
+SCRIPT
+chmod +x auto_server_setup.sh
