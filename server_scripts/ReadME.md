@@ -1,9 +1,7 @@
 # 🚀 Auto Server Setup — Ubuntu 22.04 / 24.04 LTS
 
-Script **pull-&-run** que transforma una instalación limpia de **Ubuntu Server**
-en un _home-server_ completo.  
-Incluye barra de progreso con emojis y puede ejecutarse **interactivo** (te hace
-preguntas) o **100 % desatendido** si dejas los valores por defecto.
+Script **pull-&-run** que convierte un Ubuntu Server limpio en un _home-server_ completo.  
+Incluye barra de progreso con emojis y funciona **interactivo** (te pregunta) o **100 % desatendido** (dejas los valores por defecto).
 
 ---
 
@@ -23,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/server_scr
 | **Base**   | `git` `curl` `nano` `gnupg` `fontconfig` …                             | Herramientas esenciales            |
 | **Shell**  | **Zsh**, Oh-My-Zsh, `zsh-autosuggestions`, **Oh-My-Posh** + *Meslo NF* | Prompt avanzado                    |
 | **Utils**  | `fzf`, `btop`                                                          | Búsqueda difusa · Monitor recursos |
-| **SSL**    | **Certbot** (Let’s Encrypt, vía **snap**)                              | Certificados TLS                   |
+| **SSL**    | **Certbot** (Let’s Encrypt vía **snap**)                               | Certificados TLS                   |
 | **Docker** | Docker Engine + compose-plugin                                         | Contenedores                       |
 | **Red**    | **ZeroTier One**                                                       | VPN P2P                            |
 | **UI**     | **Portainer CE** *(contenedor)*                                        | Dashboard Docker                   |
@@ -33,30 +31,29 @@ curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/server_scr
 
 ## 🧩 Lógica del orden
 
-1. **Base APT** – actualiza el sistema y añade utilidades básicas.
-2. **Shell + Utils** – mejora la experiencia de terminal antes de tareas largas.
-3. **Certbot** – ocupa el puerto 80 para retos HTTP-01; se instala temprano.
+1. **Base APT** – actualiza el SO y añade utilidades básicas.
+2. **Shell + Utils** – mejora la terminal antes de tareas largas.
+3. **Certbot** – reserva el puerto 80 para retos HTTP-01.
 4. **Docker** – prerequisito de Portainer y CasaOS.
-5. **ZeroTier** – habilita acceso remoto P2P seguro.
-6. **Portainer** – despliegue de UI Docker (contenedor).
-7. **CasaOS** *(opcional)* – dashboard doméstico que detecta Docker.
+5. **ZeroTier** – acceso remoto P2P seguro.
+6. **Portainer** – UI Docker (contenedor).
+7. **CasaOS** *(opcional)* – dashboard doméstico.
 8. **Pi-hole** *(opcional)* – DNS sinkhole nativo.
-9. **Plex** – servicio systemd desde repo oficial.
+9. **Plex** – servicio systemd del repo oficial.
 10. **Reinicio** – automático si `AUTO_REBOOT=yes`.
 
 ---
 
-## 🔧 Variables rápidas dentro del script
+## 🔧 Variables rápidas en el script
 
 ```bash
-SERVER_USER="marco"   # usuario añadido a los grupos docker/zerotier
+SERVER_USER="marco"   # usuario agregado a docker/zerotier
 INSTALL_PIHOLE="yes"  # "no" para omitir Pi-hole
 INSTALL_CASAOS="yes"  # "no" para omitir CasaOS
 AUTO_REBOOT="yes"     # "no" para reiniciar manualmente
 ```
 
-*(en modo interactivo te las pregunta al inicio; déjalas o cámbialas a mano
-para modo headless).*
+*(en modo interactivo el script te pregunta estos valores al inicio).*
 
 ---
 
@@ -73,25 +70,41 @@ para modo headless).*
 
 ## 🛡️ Notas de seguridad
 
-* **Certbot** se instala vía *snap*; emite tus certificados así:
+* **Certbot** — emite tus certificados así:
 
   ```bash
   sudo certbot certonly --standalone -d ejemplo.com -m tu@email.com
   ```
-
-* **ZeroTier** no une automáticamente tu servidor a ninguna red. Hazlo con:
+* **ZeroTier** — únete a tu red manualmente:
 
   ```bash
   sudo zerotier-cli join <NETWORK_ID>
   ```
+* El script añade repos y claves GPG oficiales para cada componente.
 
-* El script importa claves GPG y repos oficiales antes de cada paquete.
+---
+
+## ♻️ Desinstalación completa
+
+Si quieres revertir todo y dejar el sistema casi como recién instalado utiliza el script de *reset*:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/server_scripts/auto_server_reset.sh \
+  -o auto_server_reset.sh && chmod +x auto_server_reset.sh && sudo ./auto_server_reset.sh
+```
+
+Este script:
+
+1. Detiene y elimina contenedores/volúmenes Docker.
+2. Purga Docker, Portainer, ZeroTier, Tailscale, Plex, Samba, Certbot, etc.
+3. Desinstala CasaOS y Pi-hole (si existían).
+4. Limpia Oh-My-Zsh/Posh, fuentes Meslo y alias del `.zshrc`.
+5. Ejecuta `apt autoremove` y te ofrece reiniciar al final.
+
+> ⚠️ **Destructivo**: borra configuraciones y datos de los servicios listados.
+> Haz copias de seguridad antes de continuar.
 
 ---
 
 ## 📄 Licencia
-
-MIT — siéntete libre de usar, modificar y redistribuir.
-
-```
-```
+MIT — úsalo, modifícalo y compártelo libremente.
