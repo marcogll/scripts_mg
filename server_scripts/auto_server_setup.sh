@@ -100,7 +100,8 @@ chsh -s "$(command -v zsh)" "$SERVER_USER"
 next "🎨 Oh-My-Posh + Meslo"
 curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d /usr/local/bin
 
-oh-my-posh font install meslo --path /usr/local/share/fonts
+# Instalar la fuente Meslo Nerd Font (system-wide al correr como root)
+oh-my-posh font install meslo
 fc-cache -f
 
 sudo -u "$SERVER_USER" mkdir -p "/home/$SERVER_USER/.poshthemes"
