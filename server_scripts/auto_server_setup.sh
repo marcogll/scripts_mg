@@ -93,14 +93,21 @@ EOF
 chsh -s "$(command -v zsh)" "$SERVER_USER"
 
 ##############################################################################
-# 3. Oh-My-Posh + Meslo Nerd Font                                             #
+# 3. Oh-My-Posh + Meslo Nerd Font (sin bug)                                   #
 ##############################################################################
 next "🎨 Oh-My-Posh + Meslo"
 curl -fsSL https://ohmyposh.dev/install.sh | bash -s -- -d /usr/local/bin
 
-# Instala la fuente Meslo Nerd Font (system-wide al ser root)
-oh-my-posh font install meslo
+# ——— Instalación manual de la fuente Meslo Nerd Font (evita panic) ———
+TMPF=$(mktemp -d)
+curl -fsSL https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/Meslo.zip \
+     -o "$TMPF/meslo.zip"
+unzip -q "$TMPF/meslo.zip" -d "$TMPF"
+mkdir -p /usr/local/share/fonts
+cp "$TMPF"/*.ttf /usr/local/share/fonts/
 fc-cache -f
+rm -rf "$TMPF"
+# ————————————————————————————————————————————————————————————————
 
 sudo -u "$SERVER_USER" mkdir -p "/home/$SERVER_USER/.poshthemes"
 curl -fsSL https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/clean-detailed.omp.json \
@@ -108,7 +115,8 @@ curl -fsSL https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/them
 chmod 644 "/home/$SERVER_USER/.poshthemes/clean-detailed.omp.json"
 
 OMP_LINE='eval "$(oh-my-posh init zsh --config ~/.poshthemes/clean-detailed.omp.json)"'
-grep -qxF "$OMP_LINE" "$ZSHRC" || echo "$OMP_LINE" >> "$ZSHRC"
+grep -qxF "$OMP_LINE" "/home/$SERVER_USER/.zshrc" || echo "$OMP_LINE" >> "/home/$SERVER_USER/.zshrc"
+
 
 ##############################################################################
 # 4. Certbot                                                                  #
