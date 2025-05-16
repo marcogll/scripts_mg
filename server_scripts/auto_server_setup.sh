@@ -1,122 +1,211 @@
 #!/usr/bin/env bash
 # auto_server_setup_emoji_top.sh — 2025-05-02
 # • Ubuntu 22.04 / 24.04 “home-server” all-in-one:
-#   Docker + Portainer + Docker Desktop • Plex • Pi-hole • CasaOS
+#   Docker + Portainer + CapRover + Nginx Proxy Manager • Plex • Pi-hole • CasaOS
 #   Samba share • Oh-My-Zsh (plugins + alias)
-#   Barra de progreso con emojis anclada arriba.  🚀🛠️
+#   Utilidades básicas (SSH, net-tools, htop, ufw, fail2ban, avahi)
+#   Visual: barra de progreso con emojis 🚀🛠️
 
 set -euo pipefail
 
 ##############################################################################
-# Barra de progreso anclada                                                  #
+# Barra de progreso aestética                                                    #
 ##############################################################################
-STEPS_TOTAL=12          # ¡actualiza si añades/eliminas “next”!
+STEPS_TOTAL=16
 STEP_NOW=0
 bar() {
   clear
-  local width=20
-  local filled=$(( STEP_NOW*width / STEPS_TOTAL ))
+  local width=30
+  local filled=$(( STEP_NOW * width / STEPS_TOTAL ))
   local empty=$(( width - filled ))
   local gauge
   gauge="$(printf '%0.s🟩' $(seq 1 $filled))$(printf '%0.s⬜' $(seq 1 $empty))"
-  printf "%s %3d%%  %s\n\n" "$gauge" $(( STEP_NOW*100 / STEPS_TOTAL )) "$1"
+  printf "\n %s %3d%% [ %s ]\n" "$gauge" $(( STEP_NOW * 100 / STEPS_TOTAL )) "$1"
 }
 next() { STEP_NOW=$(( STEP_NOW + 1 )); bar "$1"; }
-LOG()  { echo -e "\033[1;32m▶ $*\033[0m"; }
+LOG() { echo -e "\033[1;32m▶ $*\033[0m"; }
 
 ##############################################################################
-# Comprobación de root                                                       #
+# 0. Root check                                                              #
 ##############################################################################
-[[ $(id -u) -eq 0 ]] || { echo "⚠️  Ejecútame con sudo o como root." >&2; exit 1; }
+[[ $(id -u) -eq 0 ]] || { echo "⚠️  Run as root or sudo." >&2; exit 1; }
 
 ##############################################################################
-# 0. Análisis de hardware (tipo fastfetch)                                   #
+# 1. Hardware info (neofetch)                                                 #
 ##############################################################################
-next "📊 Análisis de hardware"
-neofetch || sudo apt install -y neofetch
+next "📊 Hardware Info"
+command -v neofetch >/dev/null 2>&1 || apt install -y neofetch
 clear && neofetch
 
 ##############################################################################
-# 1. Hostname y configuración de red                                         #
+# 2. Hostname & local domain                                                  #
 ##############################################################################
-next "🖥️  Configurando hostname"
+next "🖥️  Hostname & Domain"
 DEFAULT_HOST="$(hostname)"
-read -rp "➤ Nuevo hostname [$DEFAULT_HOST]: " NEW_HOST
+read -rp "➤ New hostname [$DEFAULT_HOST]: " NEW_HOST
 NEW_HOST="${NEW_HOST:-$DEFAULT_HOST}"
-echo "$NEW_HOST" > /etc/hostname
+echo "$NEW_HOST" >/etc/hostname
 sed -i "s/127.0.1.1.*/127.0.1.1\t$NEW_HOST/" /etc/hosts || true
 hostname "$NEW_HOST"
 
-read -rp "➤ Deseas configurar un dominio local? (e.g., server.local) [Y/n]: " dom
+read -rp "➤ Configure local domain? (e.g., server.local) [Y/n]: " dom
 if [[ ${dom,,} =~ ^y ]]; then
-    read -rp "➤ Nombre del dominio (e.g., server.local): " LOCAL_DOMAIN
-    echo "127.0.0.1\t$LOCAL_DOMAIN" >> /etc/hosts
-    echo "Dominio local configurado: $LOCAL_DOMAIN"
+  read -rp "➤ Domain: " LOCAL_DOMAIN
+  echo "127.0.0.1\t$LOCAL_DOMAIN" >>/etc/hosts
+  LOG "Domain local set: $LOCAL_DOMAIN"
 fi
 
 ##############################################################################
-# 2. Permisos para Docker sin sudo                                           #
+# 3. Basic utilities                                                          #
 ##############################################################################
-next "🔓 Configurando Docker sin sudo"
+next "🛠️  Utilities"
+apt update && apt -y upgrade
+apt install -y \
+  openssh-server net-tools htop curl wget gnupg2 ca-certificates lsb-release \
+  avahi-daemon ufw fail2ban
+
+##############################################################################
+# 4. Docker install & permissions                                             #
+##############################################################################
+next "🐳 Docker"
+# Install Docker Engine
+apt install -y apt-transport-https software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+  >/etc/apt/sources.list.d/docker.list
+apt update\ apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+systemctl enable docker && systemctl start docker
+# Allow docker without sudo
 groupadd docker || true
-usermod -aG docker "$SERVER_USER"
-newgrp docker
+read -rp "➤ User to add to docker group [${SUDO_USER:-$USER}]: " DU
+DOCKER_USER="${DU:-${SUDO_USER:-$USER}}"
+usermod -aG docker "$DOCKER_USER"
 
 ##############################################################################
-# 3. Preguntas iniciales                                                     #
+# 5. Portainer                                                                #
 ##############################################################################
-next "❓ Preguntas iniciales"
-DEFAULT_USER="${SUDO_USER:-$USER}"
-read -rp "➤ Usuario Linux a configurar [$DEFAULT_USER]: " u
-SERVER_USER="${u:-$DEFAULT_USER}"
-read -rp "➤ Instalar Pi-hole? [Y/n]: " p
-INSTALL_PIHOLE="$( [[ ${p,,} =~ ^n ]] && echo no || echo yes )"
-read -rp "➤ Instalar CasaOS? [Y/n]: " c
-INSTALL_CASAOS="$( [[ ${c,,} =~ ^n ]] && echo no || echo yes )"
-read -rp "➤ Reinicio automático al final? [Y/n]: " r
-AUTO_REBOOT="$( [[ ${r,,} =~ ^n ]] && echo no || echo yes )"
+next "🔧 Portainer"
+docker volume create portainer_data
+docker run -d --name portainer \
+  --restart=always -p 9443:9443 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v portainer_data:/data portainer/portainer-ce:latest
+LOG "Portainer: https://$NEW_HOST:9443"
 
 ##############################################################################
-# 4. Paquetes base (lista + descripción)                                     #
+# 6. CapRover                                                                #
 ##############################################################################
-next "📦 Instalando paquetes base"
-declare -A PKG_DESC=(
-  [git]="control de versiones"             [curl]="cliente HTTP(S)"
-  [gnupg]="cifrado/Firmas GPG"             [lsb-release]="info de la distro"
-  [nano]="editor de texto"                 [build-essential]="compilación C/C++"
-  [ca-certificates]="certificados SSL"     [software-properties-common]="PPAs"
-  [apt-transport-https]="APT sobre HTTPS"  [fontconfig]="caché fuentes (fc-cache)"
-  [zsh]="shell Zsh"                        [fzf]="búsqueda fuzzy"
-  [btop]="monitor de recursos"             [ufw]="firewall sencillo"
-  [unzip]="descompresor ZIP"               [whiptail]="menús en shell"
-)
-echo "• Se instalarán:"
-for p in "${!PKG_DESC[@]}"; do printf "  - %-18s %s\n" "$p" "${PKG_DESC[$p]}"; done
-export DEBIAN_FRONTEND=noninteractive
-apt update && apt -y full-upgrade
-apt install -y "${!PKG_DESC[@]}"
+next "🚀 CapRover"
+docker run -d --name caprover --restart=always \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /captain:/captain \
+  -p 80:80 -p 443:443 -p 3000:3000 caprover/caprover:latest
+LOG "CapRover: http://$NEW_HOST:3000"
 
 ##############################################################################
-# 5. Oh-My-Zsh + plugins + alias                                             #
+# 7. Nginx Proxy Manager                                                      #
 ##############################################################################
-next "💎 Oh-My-Zsh + plugins/alias"
-sudo -u "$SERVER_USER" bash -c \
-  'curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh \
-  | bash -s -- --unattended'
+next "🌐 NPM"
+docker run -d --name nginx-proxy-manager --restart=unless-stopped \
+  -p 80:80 -p 443:443 -p 81:81 \
+  -v /opt/npm/data:/data \
+  -v /opt/npm/letsencrypt:/etc/letsencrypt \
+  jc21/nginx-proxy-manager:latest
+LOG "Nginx Proxy Manager: http://$NEW_HOST:81"
 
-sudo -u "$SERVER_USER" git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions \
-  "/home/$SERVER_USER/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-sudo -u "$SERVER_USER" git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting \
-  "/home/$SERVER_USER/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+##############################################################################
+# 8. Plex                                                                     #
+##############################################################################
+next "🎞️  Plex"
+docker run -d --name plex --restart=unless-stopped \
+  --network=host \
+  -e TZ="America/Monterrey" \
+  -v /srv/plex/config:/config \
+  -v /srv/plex/media:/data plexinc/pms-docker:latest
+LOG "Plex: http://$NEW_HOST:32400/web"
 
-ZSHRC="/home/$SERVER_USER/.zshrc"
-sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions zsh-syntax-highlighting colorize)/' "$ZSHRC"
-grep -qxF "alias cls='clear'" "$ZSHRC" || cat >>"$ZSHRC" <<'EOF'
+##############################################################################
+# 9. Pi-hole                                                                  #
+##############################################################################
+next "🚫 Pi-hole"
+docker run -d --name pihole --restart=unless-stopped \
+  -p 53:53/tcp -p 53:53/udp -p 8080:80 \
+  -e TZ="America/Monterrey" \
+  -e WEBPASSWORD="changeme" \
+  -v /opt/pihole/etc-pihole:/etc/pihole \
+  -v /opt/pihole/etc-dnsmasq.d:/etc/dnsmasq.d pihole/pihole:latest
+LOG "Pi-hole: http://$NEW_HOST:8080"
 
-# --- Custom aliases ---
-alias cls='clear'
-alias clima='curl wttr.in/Saltillo'
-alias pip='pip3'
-export PATH=$HOME/.local/bin:$HOME/.npm-global/bin:$PATH
+##############################################################################
+# 10. CasaOS                                                                  #
+##############################################################################
+next "🏠 CasaOS"
+curl -fsSL https://get.casaos.io | bash
+LOG "CasaOS: http://$NEW_HOST"
+
+##############################################################################
+# 11. Samba share                                                             #
+##############################################################################
+next "📁 Samba"
+read -rp "➤ Folder to share (full path): " SMB_DIR
+mkdir -p "$SMB_DIR"
+read -rp "➤ Samba user: " SMB_USER
+read -srp "➤ Samba password: " SMB_PASS; echo
+adduser --gecos "" --disabled-password "$SMB_USER"
+echo "$SMB_USER:$SMB_PASS" | chpasswd
+(echo "$SMB_PASS"; echo "$SMB_PASS") | smbpasswd -s -a "$SMB_USER"
+cat >>/etc/samba/smb.conf <<EOF
+[$SMB_USER]
+  path = $SMB_DIR
+  browseable = yes
+  read only = no
+  valid users = $SMB_USER
 EOF
-chsh -s "$(command -v zsh)" "$SERVER_USER"
+systemctl restart smbd nmbd
+LOG "Samba share: //$NEW_HOST/$SMB_USER"
+
+##############################################################################
+# 12. Oh My Zsh + plugins + alias                                             #
+##############################################################################
+next "💎 Oh My Zsh"
+apt install -y zsh git
+sudo -u "$DOCKER_USER" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+chsh -s $(which zsh) "$DOCKER_USER"
+sudo -u "$DOCKER_USER" git clone https://github.com/zsh-users/zsh-autosuggestions \
+  "/home/$DOCKER_USER/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+sudo -u "$DOCKER_USER" git clone https://github.com/zsh-users/zsh-syntax-highlighting \
+  "/home/$DOCKER_USER/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+sed -i 's/plugins=(/plugins=(docker docker-compose zsh-autosuggestions zsh-syntax-highlighting /' "/home/$DOCKER_USER/.zshrc"
+LOG "Oh My Zsh configured for $DOCKER_USER"
+
+##############################################################################
+# 13. Firewall & Fail2Ban                                                     #
+##############################################################################
+next "🛡️ Firewall"
+ufw allow OpenSSH && ufw allow 81 && ufw allow 3000 && ufw allow 32400 && ufw allow 8080 && ufw --force enable
+systemctl enable fail2ban && systemctl start fail2ban
+
+##############################################################################
+# 14. Final summary                                                          #
+##############################################################################
+next "✅ Summary"
+echo
+LOG "Access your services:"
+echo " - Portainer → https://$NEW_HOST:9443"
+echo " - CapRover → http://$NEW_HOST:3000"
+echo " - NPM → http://$NEW_HOST:81"
+echo " - Plex → http://$NEW_HOST:32400/web"
+echo " - Pi-hole → http://$NEW_HOST:8080"
+echo " - CasaOS → http://$NEW_HOST"
+echo " - Samba → //$NEW_HOST/$SMB_USER"
+
+##############################################################################
+# 15. Reboot if desired                                                       #
+##############################################################################
+read -rp "🔄 Reboot now? [y/N]: " REBOOT
+if [[ ${REBOOT,,} == y ]]; then
+  reboot
+else
+  LOG "Setup complete. Reboot manually to apply all changes."
+fi
