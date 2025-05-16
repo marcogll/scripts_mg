@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # auto_server_setup_emoji_top.sh — 2025-05-02
 # • Ubuntu 22.04 / 24.04 “home-server” all-in-one:
-#   Docker + Portainer + CapRover + Nginx Proxy Manager • Plex • Pi-hole • CasaOS
+#   Configuración Wi-Fi • Docker + Portainer + CapRover + Nginx Proxy Manager • Plex • Pi-hole • CasaOS
 #   Samba share • Oh-My-Zsh (plugins + alias)
 #   Utilidades básicas (SSH, net-tools, htop, ufw, fail2ban, avahi)
 #   Visual: barra de progreso con emojis 🚀🛠️
@@ -9,9 +9,9 @@
 set -euo pipefail
 
 ##############################################################################
-# Barra de progreso aestética                                                    #
+# Barra de progreso estética                                                    #
 ##############################################################################
-STEPS_TOTAL=16
+STEPS_TOTAL=17
 STEP_NOW=0
 bar() {
   clear
@@ -31,32 +31,62 @@ LOG() { echo -e "\033[1;32m▶ $*\033[0m"; }
 [[ $(id -u) -eq 0 ]] || { echo "⚠️  Run as root or sudo." >&2; exit 1; }
 
 ##############################################################################
-# 1. Hardware info (neofetch)                                                 #
+# 1. Wi-Fi Configuration                                                      #
+##############################################################################
+next "📶 Wi-Fi"
+# Detect wireless adapter
+if lspci | grep -i wireless >/dev/null || lsusb | grep -i wireless >/dev/null; then
+  LOG "Adaptador Wi-Fi detectado"
+  apt update && apt install -y wpasupplicant wireless-tools
+  read -rp "➤ SSID de la red Wi-Fi: " WIFI_SSID
+  read -rsp "➤ Contraseña Wi-Fi: " WIFI_PASS; echo
+  cat > /etc/wpa_supplicant/wpa_supplicant.conf <<EOF
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=MX
+
+network={
+    ssid="${WIFI_SSID}"
+    psk="${WIFI_PASS}"
+}
+EOF
+  chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+  systemctl enable wpa_supplicant
+  systemctl start wpa_supplicant
+  # Try obtaining IP
+  dhclient -v wlan0 || dhclient -v wlp2s0 || true
+  LOG "Wi-Fi configurado"
+else
+  LOG "No se detectó adaptador Wi-Fi; omitiendo configuración"
+fi
+
+##############################################################################
+# 2. Hardware info (neofetch)                                                 #
 ##############################################################################
 next "📊 Hardware Info"
 command -v neofetch >/dev/null 2>&1 || apt install -y neofetch
 clear && neofetch
 
 ##############################################################################
-# 2. Hostname & local domain                                                  #
+# 3. Hostname & local domain                                                  #
 ##############################################################################
 next "🖥️  Hostname & Domain"
 DEFAULT_HOST="$(hostname)"
-read -rp "➤ New hostname [$DEFAULT_HOST]: " NEW_HOST
+read -rp "➤ New hostname [${DEFAULT_HOST}]: " NEW_HOST
 NEW_HOST="${NEW_HOST:-$DEFAULT_HOST}"
 echo "$NEW_HOST" >/etc/hostname
 sed -i "s/127.0.1.1.*/127.0.1.1\t$NEW_HOST/" /etc/hosts || true
 hostname "$NEW_HOST"
 
-read -rp "➤ Configure local domain? (e.g., server.local) [Y/n]: " dom
-if [[ ${dom,,} =~ ^y ]]; then
+read -rp "➤ Configure local domain? (e.g., server.local) [Y/n]: " DOM
+if [[ ${DOM,,} =~ ^y ]]; then
   read -rp "➤ Domain: " LOCAL_DOMAIN
   echo "127.0.0.1\t$LOCAL_DOMAIN" >>/etc/hosts
   LOG "Domain local set: $LOCAL_DOMAIN"
 fi
 
 ##############################################################################
-# 3. Basic utilities                                                          #
+# 4. Basic utilities                                                          #
 ##############################################################################
 next "🛠️  Utilities"
 apt update && apt -y upgrade
@@ -65,16 +95,15 @@ apt install -y \
   avahi-daemon ufw fail2ban
 
 ##############################################################################
-# 4. Docker install & permissions                                             #
+# 5. Docker install & permissions                                             #
 ##############################################################################
 next "🐳 Docker"
-# Install Docker Engine
 apt install -y apt-transport-https software-properties-common
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
 https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
   >/etc/apt/sources.list.d/docker.list
-apt update\ apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 systemctl enable docker && systemctl start docker
 # Allow docker without sudo
 groupadd docker || true
@@ -83,7 +112,7 @@ DOCKER_USER="${DU:-${SUDO_USER:-$USER}}"
 usermod -aG docker "$DOCKER_USER"
 
 ##############################################################################
-# 5. Portainer                                                                #
+# 6. Portainer                                                                #
 ##############################################################################
 next "🔧 Portainer"
 docker volume create portainer_data
@@ -94,7 +123,7 @@ docker run -d --name portainer \
 LOG "Portainer: https://$NEW_HOST:9443"
 
 ##############################################################################
-# 6. CapRover                                                                #
+# 7. CapRover                                                                #
 ##############################################################################
 next "🚀 CapRover"
 docker run -d --name caprover --restart=always \
@@ -104,7 +133,7 @@ docker run -d --name caprover --restart=always \
 LOG "CapRover: http://$NEW_HOST:3000"
 
 ##############################################################################
-# 7. Nginx Proxy Manager                                                      #
+# 8. Nginx Proxy Manager                                                      #
 ##############################################################################
 next "🌐 NPM"
 docker run -d --name nginx-proxy-manager --restart=unless-stopped \
@@ -115,7 +144,7 @@ docker run -d --name nginx-proxy-manager --restart=unless-stopped \
 LOG "Nginx Proxy Manager: http://$NEW_HOST:81"
 
 ##############################################################################
-# 8. Plex                                                                     #
+# 9. Plex                                                                     #
 ##############################################################################
 next "🎞️  Plex"
 docker run -d --name plex --restart=unless-stopped \
@@ -126,7 +155,7 @@ docker run -d --name plex --restart=unless-stopped \
 LOG "Plex: http://$NEW_HOST:32400/web"
 
 ##############################################################################
-# 9. Pi-hole                                                                  #
+# 10. Pi-hole                                                                  #
 ##############################################################################
 next "🚫 Pi-hole"
 docker run -d --name pihole --restart=unless-stopped \
@@ -138,14 +167,14 @@ docker run -d --name pihole --restart=unless-stopped \
 LOG "Pi-hole: http://$NEW_HOST:8080"
 
 ##############################################################################
-# 10. CasaOS                                                                  #
+# 11. CasaOS                                                                  #
 ##############################################################################
 next "🏠 CasaOS"
 curl -fsSL https://get.casaos.io | bash
 LOG "CasaOS: http://$NEW_HOST"
 
 ##############################################################################
-# 11. Samba share                                                             #
+# 12. Samba share                                                             #
 ##############################################################################
 next "📁 Samba"
 read -rp "➤ Folder to share (full path): " SMB_DIR
@@ -166,7 +195,7 @@ systemctl restart smbd nmbd
 LOG "Samba share: //$NEW_HOST/$SMB_USER"
 
 ##############################################################################
-# 12. Oh My Zsh + plugins + alias                                             #
+# 13. Oh My Zsh + plugins + alias                                             #
 ##############################################################################
 next "💎 Oh My Zsh"
 apt install -y zsh git
@@ -180,14 +209,14 @@ sed -i 's/plugins=(/plugins=(docker docker-compose zsh-autosuggestions zsh-synta
 LOG "Oh My Zsh configured for $DOCKER_USER"
 
 ##############################################################################
-# 13. Firewall & Fail2Ban                                                     #
+# 14. Firewall & Fail2Ban                                                     #
 ##############################################################################
 next "🛡️ Firewall"
 ufw allow OpenSSH && ufw allow 81 && ufw allow 3000 && ufw allow 32400 && ufw allow 8080 && ufw --force enable
 systemctl enable fail2ban && systemctl start fail2ban
 
 ##############################################################################
-# 14. Final summary                                                          #
+# 15. Final summary                                                          #
 ##############################################################################
 next "✅ Summary"
 echo
@@ -201,7 +230,7 @@ echo " - CasaOS → http://$NEW_HOST"
 echo " - Samba → //$NEW_HOST/$SMB_USER"
 
 ##############################################################################
-# 15. Reboot if desired                                                       #
+# 16. Reboot if desired                                                       #
 ##############################################################################
 read -rp "🔄 Reboot now? [y/N]: " REBOOT
 if [[ ${REBOOT,,} == y ]]; then
