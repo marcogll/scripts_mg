@@ -8,6 +8,8 @@
 #   Todo el output se registra en /var/log/auto_server_setup.log
 
 set -euo pipefail
+# Workaround para evitar errores de "unbound variable" en funciones
+width=30
 
 # Logfile setup
 LOGFILE="/var/log/auto_server_setup.log"
