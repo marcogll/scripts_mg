@@ -1,4 +1,4 @@
-````markdown
+
 # install-ltunify.sh
 
 Este script automatiza la instalación, compilación y configuración de **ltunify** en Ubuntu. Incluye:
