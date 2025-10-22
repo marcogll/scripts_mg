@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-#                   OMARCHY ZSH SETUP SCRIPT
+#                   OMARCHY ZSH SETUP SCRIPT v2.0
 # =============================================================================
 # GitHub: https://github.com/marcogll/scripts_mg
 # Instalación: bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/omarchy-setup.sh)
@@ -18,10 +18,11 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-TOTAL_STEPS=16
+TOTAL_STEPS=19
 CURRENT_STEP=0
 ZEROTIER_NETWORK=""
 KEYRING_PASSWORD=""
+NEEDS_REBOOT=false
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -30,7 +31,7 @@ KEYRING_PASSWORD=""
 print_header() {
     clear
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}${BOLD}          OMARCHY ZSH SETUP - Configuración Completa${NC}          ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}${BOLD}        OMARCHY ZSH SETUP v2.0 - Setup Completo${NC}             ${CYAN}║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -83,6 +84,11 @@ ask_yes_no() {
     done
 }
 
+check_installed() {
+    local pkg=$1
+    pacman -Q "$pkg" &> /dev/null
+}
+
 # =============================================================================
 # VERIFICACIONES
 # =============================================================================
@@ -110,9 +116,9 @@ install_packages() {
     
     local packages=(
         "zsh" "git" "curl" "wget"
-        "oh-my-posh"
         "python" "python-pip" "python-virtualenv"
         "nodejs" "npm"
+        "go"
         "docker" "docker-compose"
         "yt-dlp" "ffmpeg"
         "playerctl" "brightnessctl" "pamixer"
@@ -126,15 +132,31 @@ install_packages() {
         "neofetch" "htop" "btop" "tree" "unzip" "p7zip" "unrar"
     )
     
-    info "Actualizando sistema..."
+    info "Actualizando base de datos de paquetes..."
     sudo pacman -Sy --noconfirm
     
-    info "Instalando ${#packages[@]} paquetes..."
-    for pkg in "${packages[@]}"; do
-        sudo pacman -S --noconfirm --needed "$pkg" 2>&1 | grep -v "warning:" || true
-    done
+    local to_install=()
+    local total=${#packages[@]}
+    local current=0
     
-    success "Paquetes instalados"
+    for pkg in "${packages[@]}"; do
+        current=$((current + 1))
+        if ! check_installed "$pkg"; then
+            to_install+=("$pkg")
+        fi
+        printf "\r  Verificando paquetes... [%d/%d]" $current $total
+    done
+    echo ""
+    
+    if [ ${#to_install[@]} -eq 0 ]; then
+        success "Todos los paquetes ya están instalados"
+        return
+    fi
+    
+    info "Instalando ${#to_install[@]} paquetes nuevos..."
+    sudo pacman -S --noconfirm --needed "${to_install[@]}"
+    
+    success "Paquetes instalados: ${#to_install[@]}"
 }
 
 install_yay() {
@@ -145,31 +167,42 @@ install_yay() {
         return
     fi
     
-    info "Clonando yay..."
+    info "Clonando yay desde AUR..."
     cd /tmp
     rm -rf yay
     git clone https://aur.archlinux.org/yay.git --quiet
     cd yay
     
     info "Compilando yay..."
-    makepkg -si --noconfirm
+    makepkg -si --noconfirm --nocheck
     cd ~
     
     success "yay instalado"
 }
 
+install_oh_my_posh() {
+    step "Instalando Oh My Posh"
+    
+    if command -v oh-my-posh &> /dev/null; then
+        success "Oh My Posh ya está instalado"
+        return
+    fi
+    
+    info "Instalando oh-my-posh-bin desde AUR..."
+    yay -S --noconfirm oh-my-posh-bin
+    
+    success "Oh My Posh instalado"
+}
+
 install_google_chrome() {
     step "Instalando Google Chrome"
     
-    if pacman -Q omarchy-chromium &> /dev/null; then
-        info "Removiendo omarchy-chromium..."
-        sudo pacman -Rns --noconfirm omarchy-chromium 2>/dev/null || true
-    fi
-    
-    if pacman -Q chromium &> /dev/null; then
-        info "Removiendo chromium..."
-        sudo pacman -Rns --noconfirm chromium 2>/dev/null || true
-    fi
+    for chromium_pkg in omarchy-chromium chromium; do
+        if check_installed "$chromium_pkg"; then
+            info "Removiendo $chromium_pkg..."
+            sudo pacman -Rns --noconfirm "$chromium_pkg" 2>/dev/null || true
+        fi
+    done
     
     if command -v google-chrome-stable &> /dev/null; then
         success "Google Chrome ya está instalado"
@@ -180,16 +213,45 @@ install_google_chrome() {
     fi
 }
 
+install_localsend() {
+    step "Instalando LocalSend"
+    
+    if command -v localsend_app &> /dev/null; then
+        success "LocalSend ya está instalado"
+        return
+    fi
+    
+    info "Instalando LocalSend desde AUR..."
+    yay -S --noconfirm localsend-bin
+    
+    success "LocalSend instalado"
+    info "Abre LocalSend desde el menú de aplicaciones"
+}
+
 install_emoji_launcher() {
     step "Instalando Emoji Launcher"
     
-    info "Instalando rofi y emoji selector..."
-    sudo pacman -S --noconfirm --needed rofi wl-clipboard
-    yay -S --noconfirm rofimoji
+    local packages_needed=("rofi" "wl-clipboard")
+    local to_install=()
+    
+    for pkg in "${packages_needed[@]}"; do
+        if ! check_installed "$pkg"; then
+            to_install+=("$pkg")
+        fi
+    done
+    
+    if [ ${#to_install[@]} -gt 0 ]; then
+        info "Instalando dependencias..."
+        sudo pacman -S --noconfirm --needed "${to_install[@]}"
+    fi
+    
+    if ! command -v rofimoji &> /dev/null; then
+        info "Instalando rofimoji..."
+        yay -S --noconfirm rofimoji
+    fi
     
     if [ -f "$HOME/.config/hypr/bindings.conf" ]; then
         if ! grep -q "rofimoji" "$HOME/.config/hypr/bindings.conf"; then
-            info "Agregando keybinding..."
             cat >> "$HOME/.config/hypr/bindings.conf" << 'EOF'
 
 # Emoji Launcher - SUPER+PERIOD
@@ -204,13 +266,18 @@ EOF
 install_epson_drivers() {
     step "Instalando drivers Epson L4150"
     
-    info "Instalando drivers desde AUR..."
+    info "Instalando drivers Epson..."
     yay -S --noconfirm epson-inkjet-printer-escpr epson-inkjet-printer-escpr2
+    
+    info "Instalando Epson Scan..."
+    yay -S --noconfirm epsonscan2 || warning "epsonscan2 no disponible"
     
     info "Habilitando CUPS..."
     sudo systemctl enable --now cups.service
     sudo systemctl enable --now cups-browsed.service 2>/dev/null || true
     sudo usermod -aG lp "$USER"
+    
+    NEEDS_REBOOT=true
     
     success "Drivers Epson instalados"
     info "Configura en: http://localhost:631"
@@ -222,7 +289,7 @@ install_zerotier() {
     if command -v zerotier-cli &> /dev/null; then
         success "ZeroTier ya está instalado"
     else
-        info "Instalando desde AUR..."
+        info "Instalando zerotier-one..."
         yay -S --noconfirm zerotier-one
         success "ZeroTier instalado"
     fi
@@ -230,17 +297,19 @@ install_zerotier() {
     info "Habilitando servicio..."
     sudo systemctl enable --now zerotier-one.service
     
+    NEEDS_REBOOT=true
+    
     echo ""
     echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
     echo -e "${BOLD}Configuración de ZeroTier Network${NC}"
     echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
     echo ""
     
-    if ask_yes_no "¿Conectarse a tu red ZeroTier ahora?" "y"; then
+    if ask_yes_no "¿Conectarse a tu red ZeroTier?" "y"; then
         read -p "$(echo -e ${YELLOW}Network ID: ${NC})" ZEROTIER_NETWORK
         
         if [ ! -z "$ZEROTIER_NETWORK" ]; then
-            info "Conectando a $ZEROTIER_NETWORK..."
+            info "Conectando..."
             sudo zerotier-cli join "$ZEROTIER_NETWORK"
             success "Solicitud enviada"
             warning "Autoriza en: https://my.zerotier.com"
@@ -258,75 +327,53 @@ configure_gnome_keyring() {
     echo -e "${BOLD}Configuración de GNOME Keyring${NC}"
     echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
     echo ""
-    info "El keyring permite guardar contraseñas de Git, VS Code, etc."
+    info "Guarda contraseñas de Git, VS Code, etc."
     echo ""
     
-    if ask_yes_no "¿Configurar GNOME Keyring ahora?" "y"; then
+    if ask_yes_no "¿Configurar ahora?" "y"; then
         echo ""
-        echo -e "${YELLOW}Opciones de contraseña:${NC}"
-        echo "  1. Sin contraseña (más conveniente, menos seguro)"
-        echo "  2. Igual a tu contraseña de usuario (recomendado)"
-        echo "  3. Contraseña personalizada"
+        echo -e "${YELLOW}Opciones:${NC}"
+        echo "  1. Sin contraseña (conveniente)"
+        echo "  2. Contraseña de usuario (recomendado)"
+        echo "  3. Personalizada"
         echo ""
-        read -p "$(echo -e ${YELLOW}Selecciona opción [1/2/3]: ${NC})" keyring_option
+        read -p "$(echo -e ${YELLOW}Selecciona [1/2/3]: ${NC})" keyring_option
         
         case "$keyring_option" in
-            1)
-                KEYRING_PASSWORD=""
-                info "Keyring sin contraseña (desbloqueo automático)"
-                ;;
             2)
                 echo ""
-                info "Ingresa tu contraseña de usuario de Linux:"
+                info "Ingresa tu contraseña de usuario:"
                 read -s KEYRING_PASSWORD
                 echo ""
                 ;;
             3)
                 echo ""
-                read -sp "$(echo -e ${YELLOW}Nueva contraseña para keyring: ${NC})" KEYRING_PASSWORD
+                read -sp "$(echo -e ${YELLOW}Nueva contraseña: ${NC})" KEYRING_PASSWORD
                 echo ""
-                read -sp "$(echo -e ${YELLOW}Confirma contraseña: ${NC})" keyring_confirm
+                read -sp "$(echo -e ${YELLOW}Confirmar: ${NC})" keyring_confirm
                 echo ""
-                
-                if [ "$KEYRING_PASSWORD" != "$keyring_confirm" ]; then
-                    warning "Las contraseñas no coinciden, usando sin contraseña"
-                    KEYRING_PASSWORD=""
-                fi
+                [ "$KEYRING_PASSWORD" != "$keyring_confirm" ] && KEYRING_PASSWORD=""
                 ;;
             *)
                 KEYRING_PASSWORD=""
                 ;;
         esac
         
-        # Configurar PAM para auto-unlock
         info "Configurando PAM..."
-        if ! grep -q "pam_gnome_keyring" /etc/pam.d/login; then
+        if ! grep -q "pam_gnome_keyring" /etc/pam.d/login 2>/dev/null; then
             echo "auth       optional     pam_gnome_keyring.so" | sudo tee -a /etc/pam.d/login > /dev/null
             echo "session    optional     pam_gnome_keyring.so auto_start" | sudo tee -a /etc/pam.d/login > /dev/null
         fi
         
-        # Configurar para SDDM si existe
-        if [ -f /etc/pam.d/sddm ]; then
-            if ! grep -q "pam_gnome_keyring" /etc/pam.d/sddm; then
-                echo "auth       optional     pam_gnome_keyring.so" | sudo tee -a /etc/pam.d/sddm > /dev/null
-                echo "session    optional     pam_gnome_keyring.so auto_start" | sudo tee -a /etc/pam.d/sddm > /dev/null
-            fi
-        fi
+        [ -f /etc/pam.d/sddm ] && ! grep -q "pam_gnome_keyring" /etc/pam.d/sddm && {
+            echo "auth       optional     pam_gnome_keyring.so" | sudo tee -a /etc/pam.d/sddm > /dev/null
+            echo "session    optional     pam_gnome_keyring.so auto_start" | sudo tee -a /etc/pam.d/sddm > /dev/null
+        }
         
-        # Iniciar daemon
-        info "Iniciando gnome-keyring-daemon..."
         eval $(gnome-keyring-daemon --start --components=pkcs11,secrets,ssh 2>/dev/null)
         export SSH_AUTH_SOCK GPG_AGENT_INFO GNOME_KEYRING_CONTROL GNOME_KEYRING_PID
         
         success "GNOME Keyring configurado"
-        echo ""
-        info "Configuración adicional:"
-        echo "  1. Abre Seahorse (Contraseñas y claves)"
-        echo "  2. Click en keyring 'Login'"
-        echo "  3. Cambia contraseña si es necesario"
-        echo ""
-    else
-        info "Puedes configurarlo después con: seahorse"
     fi
 }
 
@@ -353,37 +400,33 @@ install_zsh_plugins() {
     
     local ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
     
-    if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
+    [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ] && \
         git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions" --quiet
-    fi
     
-    if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
+    [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ] && \
         git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" --quiet
-    fi
     
     success "Plugins instalados"
 }
 
 install_oh_my_posh_theme() {
-    step "Configurando Oh My Posh"
+    step "Configurando tema Oh My Posh"
     
     mkdir -p ~/.poshthemes
     curl -fsSL https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin.omp.json \
         -o ~/.poshthemes/catppuccin.omp.json
     
-    success "Tema Catppuccin configurado"
+    success "Tema Catppuccin listo"
 }
 
 create_zshrc() {
-    step "Creando configuración de Zsh"
+    step "Creando configuración Zsh"
     
-    if [ -f "$HOME/.zshrc" ]; then
-        cp "$HOME/.zshrc" "$HOME/.zshrc.backup.$(date +%Y%m%d_%H%M%S)"
-    fi
+    [ -f "$HOME/.zshrc" ] && cp "$HOME/.zshrc" "$HOME/.zshrc.backup.$(date +%Y%m%d_%H%M%S)"
     
     cat > "$HOME/.zshrc" << 'ZSHRC_EOF'
 # =============================================================================
-#                         MI CONFIGURACIÓN ZSH (OMARCHY)
+#                    CONFIGURACIÓN ZSH - OMARCHY v2.0
 # =============================================================================
 
 # --- PATH --------------------------------------------------------------------
@@ -393,6 +436,7 @@ path=(
   $HOME/bin
   $HOME/.npm-global/bin
   $HOME/AppImages
+  $HOME/go/bin
   $path
 )
 
@@ -403,7 +447,7 @@ ZSH_THEME=""
 plugins=(
   git sudo history colorize
   docker docker-compose
-  npm node python pip
+  npm node python pip golang
   copypath copyfile
 )
 
@@ -414,21 +458,26 @@ zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' menu select
 
-if [ -r "$ZSH/oh-my-zsh.sh" ]; then
-  source "$ZSH/oh-my-zsh.sh"
-fi
+[ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
 
-if [ -r "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
+[ -r "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ] && \
   source "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
-fi
-if [ -r "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]; then
+
+[ -r "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] && \
   source "${ZSH_CUSTOM:-$ZSH/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
-fi
 
 # --- Oh My Posh --------------------------------------------------------------
 if command -v oh-my-posh >/dev/null 2>&1; then
-  eval "$(oh-my-posh init zsh --config ~/.poshthemes/catppuccin.omp.json)"
+  if [ -f ~/.poshthemes/catppuccin.omp.json ]; then
+    eval "$(oh-my-posh init zsh --config ~/.poshthemes/catppuccin.omp.json)"
+  else
+    eval "$(oh-my-posh init zsh)"
+  fi
 fi
+
+# --- Go ----------------------------------------------------------------------
+export GOPATH="$HOME/go"
+export GOBIN="$GOPATH/bin"
 
 # --- NVM ---------------------------------------------------------------------
 export NVM_DIR="$HOME/.nvm"
@@ -441,7 +490,7 @@ alias python='python3'
 
 venv() {
   case "$1" in
-    create) python -m venv .venv && echo "✅ Entorno virtual creado" ;;
+    create) python -m venv .venv && echo "✅ Entorno creado" ;;
     on|activate)
       [ -f ".venv/bin/activate" ] && . .venv/bin/activate && echo "🟢 Activado" || echo "❌ No encontrado" ;;
     off|deactivate)
@@ -482,11 +531,7 @@ alias glog='git log --oneline --graph --decorate'
 gac(){ git add . && git commit -m "$1"; }
 
 # Docker
-if docker compose version >/dev/null 2>&1; then
-  alias dc='docker compose'
-else
-  alias dc='docker-compose'
-fi
+docker compose version >/dev/null 2>&1 && alias dc='docker compose' || alias dc='docker-compose'
 alias d='docker'
 alias dps='docker ps -a'
 alias di='docker images'
@@ -519,59 +564,113 @@ alias clima='curl wttr.in/Saltillo'
 mkcd(){ mkdir -p "$1" && cd "$1"; }
 
 extract(){
-  if [ -f "$1" ]; then
-    case "$1" in
-      *.tar.bz2) tar xjf "$1" ;;
-      *.tar.gz) tar xzf "$1" ;;
-      *.bz2) bunzip2 "$1" ;;
-      *.rar) unrar e "$1" ;;
-      *.gz) gunzip "$1" ;;
-      *.tar) tar xf "$1" ;;
-      *.tbz2) tar xjf "$1" ;;
-      *.tgz) tar xzf "$1" ;;
-      *.zip) unzip "$1" ;;
-      *.Z) uncompress "$1" ;;
-      *.7z) 7z x "$1" ;;
-      *) echo "'$1' no se puede extraer" ;;
-    esac
-  fi
+  [ ! -f "$1" ] && echo "No es un archivo" && return 1
+  case "$1" in
+    *.tar.bz2) tar xjf "$1" ;;
+    *.tar.gz) tar xzf "$1" ;;
+    *.bz2) bunzip2 "$1" ;;
+    *.rar) unrar e "$1" ;;
+    *.gz) gunzip "$1" ;;
+    *.tar) tar xf "$1" ;;
+    *.tbz2) tar xjf "$1" ;;
+    *.tgz) tar xzf "$1" ;;
+    *.zip) unzip "$1" ;;
+    *.Z) uncompress "$1" ;;
+    *.7z) 7z x "$1" ;;
+    *) echo "No se puede extraer '$1'" ;;
+  esac
 }
 
 killport(){
-  if [ $# -eq 0 ]; then echo "Uso: killport <puerto>"; return 1; fi
+  [ $# -eq 0 ] && echo "Uso: killport <puerto>" && return 1
   local pid=$(lsof -ti:"$1" 2>/dev/null)
   [ -n "$pid" ] && kill -9 "$pid" && echo "✅ Eliminado" || echo "🤷 No encontrado"
 }
 
 serve(){ python -m http.server "${1:-8000}"; }
 
-# --- yt-dlp ------------------------------------------------------------------
-export YTDLP_DIR="$HOME/Videos/ytdlp"
-[[ -d "$YTDLP_DIR" ]] || mkdir -p "$YTDLP_DIR"
+# --- yt-dlp MEJORADO ---------------------------------------------------------
+export YTDLP_DIR="$HOME/Videos/YouTube"
+mkdir -p "$YTDLP_DIR"/{Music,Videos}
 
 ytm() {
   case "$1" in
-    -h|--help|'') echo "🎵 ytm <URL|búsqueda>"; return 0 ;;
+    -h|--help|'') 
+      echo "🎵 ytm <URL|búsqueda> - MP3 320kbps"
+      echo "Ejemplos:"
+      echo "  ytm https://youtu.be/..."
+      echo "  ytm 'nombre canción'"
+      return 0 
+      ;;
   esac
-  local out="$YTDLP_DIR/%(title).200s [%(id)s].%(ext)s"
+  
+  local out="$YTDLP_DIR/Music/%(title).180s.%(ext)s"
+  local opts=(
+    --extract-audio --audio-format mp3 --audio-quality 320K
+    --embed-metadata --embed-thumbnail --convert-thumbnails jpg
+    --no-playlist --retries 10 --fragment-retries 10
+    --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    --extractor-args "youtube:player_client=android,web"
+    --progress --newline -o "$out"
+  )
+  
   if [[ "$1" == http* ]]; then
-    yt-dlp -x --audio-format mp3 --audio-quality 320K --embed-metadata --embed-thumbnail --convert-thumbnails jpg -o "$out" "$@"
+    echo "📥 Descargando audio..."
+    yt-dlp "${opts[@]}" "$@"
   else
-    yt-dlp -x --audio-format mp3 --audio-quality 320K --embed-metadata --embed-thumbnail --convert-thumbnails jpg -o "$out" "ytsearch1:$*"
+    echo "🔍 Buscando: $*"
+    yt-dlp "${opts[@]}" "ytsearch1:$*"
   fi
+  
+  [ $? -eq 0 ] && echo "✅ En: $YTDLP_DIR/Music/"
 }
 
 ytv() {
   case "$1" in
-    -h|--help|'') echo "🎬 ytv <URL|búsqueda>"; return 0 ;;
+    -h|--help|'') 
+      echo "🎬 ytv <URL|búsqueda> [calidad]"
+      echo "Calidades: 1080, 720, 480 (default: best)"
+      return 0 
+      ;;
   esac
-  local out="$YTDLP_DIR/%(title).200s [%(id)s].%(ext)s"
-  local fmt='bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b'
+  
+  local quality="${2:-best}"
+  local out="$YTDLP_DIR/Videos/%(title).180s.%(ext)s"
+  
+  local fmt
+  case "$quality" in
+    1080) fmt='bv*[height<=1080][ext=mp4]+ba/b[height<=1080]' ;;
+    720)  fmt='bv*[height<=720][ext=mp4]+ba/b[height<=720]' ;;
+    480)  fmt='bv*[height<=480][ext=mp4]+ba/b[height<=480]' ;;
+    *)    fmt='bv*[ext=mp4]+ba/b[ext=mp4]/b' ;;
+  esac
+  
+  local opts=(
+    -f "$fmt" --embed-metadata --embed-thumbnail
+    --embed-subs --sub-langs "es.*,en.*" --convert-thumbnails jpg
+    --no-playlist --retries 10 --fragment-retries 10
+    --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    --extractor-args "youtube:player_client=android,web"
+    --progress --newline -o "$out"
+  )
+  
   if [[ "$1" == http* ]]; then
-    yt-dlp -f "$fmt" --embed-metadata --embed-thumbnail --convert-thumbnails jpg -o "$out" "$@"
+    echo "📥 Descargando video..."
+    yt-dlp "${opts[@]}" "$1"
   else
-    yt-dlp -f "$fmt" --embed-metadata --embed-thumbnail --convert-thumbnails jpg -o "$out" "ytsearch1:$*"
+    echo "🔍 Buscando: $1"
+    yt-dlp "${opts[@]}" "ytsearch1:$1"
   fi
+  
+  [ $? -eq 0 ] && echo "✅ En: $YTDLP_DIR/Videos/"
+}
+
+ytls() {
+  echo "🎵 Music:"
+  ls -1t "$YTDLP_DIR/Music" 2>/dev/null | head -5 | sed 's/^/  /' || echo "  (vacío)"
+  echo ""
+  echo "🎬 Videos:"
+  ls -1t "$YTDLP_DIR/Videos" 2>/dev/null | head -5 | sed 's/^/  /' || echo "  (vacío)"
 }
 
 # --- GNOME Keyring -----------------------------------------------------------
@@ -587,15 +686,14 @@ HISTSIZE=100000
 SAVEHIST=100000
 HISTFILE=~/.zsh_history
 setopt APPEND_HISTORY SHARE_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_ALL_DUPS HIST_IGNORE_SPACE AUTO_CD EXTENDED_GLOB
-stty -ixon
+stty -ixon 2>/dev/null
 export LESS='-R'
 
 # --- Funciones externas ------------------------------------------------------
-[[ ! -d "$HOME/.zsh_functions" ]] && mkdir -p "$HOME/.zsh_functions"
+[ -d "$HOME/.zsh_functions" ] || mkdir -p "$HOME/.zsh_functions"
 for func_file in "$HOME/.zsh_functions"/*.zsh(N); do
   source "$func_file"
 done
-unset func_file
 
 # --- Local -------------------------------------------------------------------
 [ -f ~/.zshrc.local ] && source ~/.zshrc.local
@@ -620,7 +718,6 @@ ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight
 EOF
     
     sudo udevadm control --reload-rules 2>/dev/null || true
-    sudo udevadm trigger 2>/dev/null || true
     
     success "Permisos configurados"
 }
@@ -628,13 +725,10 @@ EOF
 configure_git() {
     step "Configurando Git"
     
-    if git config --global user.name &> /dev/null; then
-        success "Git ya configurado"
-        return
-    fi
+    git config --global user.name &> /dev/null && success "Git ya configurado" && return
     
     echo ""
-    if ask_yes_no "¿Configurar Git ahora?" "y"; then
+    if ask_yes_no "¿Configurar Git?" "y"; then
         read -p "$(echo -e ${YELLOW}Nombre: ${NC})" git_name
         read -p "$(echo -e ${YELLOW}Email: ${NC})" git_email
         
@@ -659,21 +753,19 @@ configure_npm() {
 setup_directories() {
     step "Creando directorios"
     
-    mkdir -p ~/AppImages ~/Videos/ytdlp ~/Projects ~/.zsh_functions
+    mkdir -p ~/AppImages ~/Videos/YouTube/{Music,Videos} ~/Projects ~/.zsh_functions ~/go/{bin,src,pkg}
     gsettings set org.gnome.nautilus.preferences show-image-thumbnails 'always' 2>/dev/null || true
     
     success "Directorios creados"
 }
 
 set_default_shell() {
-    step "Configurando Zsh como shell predeterminado"
+    step "Configurando Zsh"
     
-    if [ "$SHELL" == "$(which zsh)" ]; then
-        success "Zsh ya es el shell predeterminado"
-        return
-    fi
+    [ "$SHELL" == "$(which zsh)" ] && success "Zsh ya es el shell" && return
     
     chsh -s $(which zsh)
+    NEEDS_REBOOT=true
     success "Zsh configurado"
 }
 
@@ -686,26 +778,26 @@ main() {
     
     echo -e "${BOLD}Este script instalará:${NC}"
     echo ""
-    echo "  • Zsh + Oh My Zsh + Oh My Posh"
+    echo "  • Zsh + Oh My Zsh + Oh My Posh (Catppuccin)"
     echo "  • Google Chrome (remueve omarchy-chromium)"
-    echo "  • Drivers Epson L4150"
+    echo "  • LocalSend (compartir archivos)"
+    echo "  • Drivers Epson L4150 + Scan"
     echo "  • ZeroTier One"
     echo "  • Emoji Launcher (SUPER+.)"
-    echo "  • GNOME Keyring (para Git/VS Code)"
-    echo "  • Git, Docker, Node.js, Python, yt-dlp"
+    echo "  • GNOME Keyring"
+    echo "  • Go, Git, Docker, Node, Python, yt-dlp"
     echo ""
     
-    if ! ask_yes_no "¿Continuar?" "y"; then
-        info "Instalación cancelada"
-        exit 0
-    fi
+    ask_yes_no "¿Continuar?" "y" || { info "Cancelado"; exit 0; }
     
     echo ""
     check_requirements
     
     install_packages
     install_yay
+    install_oh_my_posh
     install_google_chrome
+    install_localsend
     install_emoji_launcher
     install_epson_drivers
     install_zerotier
@@ -721,15 +813,38 @@ main() {
     set_default_shell
     
     echo ""
-    echo -e "${GREEN}✓ Instalación completada${NC}"
-    echo ""
-    echo -e "${YELLOW}Próximos pasos:${NC}"
-    echo "  1. Cierra sesión y vuelve a entrar"
-    echo "  2. Abre nueva terminal"
-    echo "  3. Ejecuta: source ~/.zshrc"
+    echo -e "${GREEN}✓✓✓ Instalación completada ✓✓✓${NC}"
     echo ""
     
-    [ ! -z "$ZEROTIER_NETWORK" ] && echo -e "${YELLOW}⚠${NC}  Autoriza en: https://my.zerotier.com" && echo ""
+    if [ "$NEEDS_REBOOT" = true ]; then
+        echo -e "${YELLOW}╔════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║${NC}  ${BOLD}REINICIO REQUERIDO${NC}                      ${YELLOW}║${NC}"
+        echo -e "${YELLOW}╚════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "${CYAN}Cambios que requieren reinicio:${NC}"
+        echo "  • Grupos de usuario (docker, lp, video)"
+        echo "  • Servicios (CUPS, ZeroTier)"
+        echo "  • Shell predeterminado (Zsh)"
+        echo ""
+        
+        if ask_yes_no "¿Reiniciar ahora?" "y"; then
+            echo ""
+            info "Reiniciando en 3 segundos..."
+            sleep 3
+            sudo reboot
+        else
+            warning "Recuerda reiniciar manualmente para aplicar todos los cambios"
+        fi
+    else
+        echo -e "${CYAN}Próximos pasos:${NC}"
+        echo "  1. Cierra esta terminal"
+        echo "  2. Abre una nueva terminal"
+        echo "  3. Ejecuta: source ~/.zshrc"
+    fi
+    
+    echo ""
+    [ ! -z "$ZEROTIER_NETWORK" ] && echo -e "${YELLOW}⚠${NC}  Autoriza en: https://my.zerotier.com"
+    echo ""
 }
 
 main "$@"
