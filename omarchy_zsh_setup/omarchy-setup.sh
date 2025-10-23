@@ -129,7 +129,7 @@ install_packages() {
         "tumbler" "ffmpegthumbnailer" "poppler-glib"
         "gdk-pixbuf2" "gst-plugins-good" "gst-plugins-bad"
         "gst-plugins-ugly" "gst-libav" "libheif" "webp-pixbuf-loader"
-        "neofetch" "htop" "btop" "tree" "unzip" "p7zip" "unrar"
+        "fastfetch" "htop" "btop" "tree" "unzip" "p7zip" "unrar"
     )
     
     info "Actualizando base de datos de paquetes..."
