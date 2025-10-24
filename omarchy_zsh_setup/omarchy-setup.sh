@@ -5,6 +5,11 @@
 # =============================================================================
 # GitHub: https://github.com/marcogll/scripts_mg
 # Instalación: bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/omarchy-setup.sh)
+#
+# Uso:
+#   bash omarchy-setup.sh          # Instalación completa
+#   bash omarchy-setup.sh --ssh    # Solo configurar SSH
+#   bash omarchy-setup.sh --help   # Mostrar ayuda
 # =============================================================================
 
 set -e
@@ -18,7 +23,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-TOTAL_STEPS=19
+TOTAL_STEPS=20
 CURRENT_STEP=0
 ZEROTIER_NETWORK=""
 KEYRING_PASSWORD=""
@@ -168,6 +173,7 @@ install_packages() {
         "python" "python-pip" "python-virtualenv"
         "nodejs" "npm"
         "go"
+        "zoxide"
         "docker" "docker-compose"
         "yt-dlp" "ffmpeg"
         "playerctl" "brightnessctl" "pamixer"
@@ -777,6 +783,81 @@ if [ -n "$DESKTOP_SESSION" ]; then
   export SSH_AUTH_SOCK GPG_AGENT_INFO GNOME_KEYRING_CONTROL GNOME_KEYRING_PID
 fi
 
+# --- SSH Agent ---------------------------------------------------------------
+# Iniciar ssh-agent si no está corriendo
+if [ -z "$SSH_AUTH_SOCK" ]; then
+  # Directorio para el socket del agente
+  export SSH_AGENT_DIR="$HOME/.ssh/agent"
+  mkdir -p "$SSH_AGENT_DIR"
+  
+  # Archivo para guardar info del agente
+  SSH_ENV="$SSH_AGENT_DIR/env"
+  
+  # Función para iniciar el agente
+  start_agent() {
+    echo "🔑 Iniciando ssh-agent..."
+    ssh-agent > "$SSH_ENV"
+    chmod 600 "$SSH_ENV"
+    . "$SSH_ENV" > /dev/null
+  }
+  
+  # Verificar si hay un agente corriendo
+  if [ -f "$SSH_ENV" ]; then
+    . "$SSH_ENV" > /dev/null
+    # Verificar si el proceso del agente existe
+    ps -p $SSH_AGENT_PID > /dev/null 2>&1 || start_agent
+  else
+    start_agent
+  fi
+  
+  # Agregar llaves SSH automáticamente (detectar todas las llaves privadas)
+  if [ -d "$HOME/.ssh" ]; then
+    # Buscar todas las llaves privadas (excluir .pub, known_hosts, config, etc)
+    for key in "$HOME/.ssh"/*; do
+      # Verificar que sea archivo regular, no .pub, y sea llave SSH válida
+      if [ -f "$key" ] && [[ ! "$key" =~ \.pub$ ]] && \
+         [[ ! "$key" =~ known_hosts ]] && [[ ! "$key" =~ authorized_keys ]] && \
+         [[ ! "$key" =~ config ]] && [[ ! "$key" =~ agent ]]; then
+        # Verificar que sea llave SSH válida
+        if ssh-keygen -l -f "$key" &>/dev/null; then
+          # Verificar si ya está cargada
+          local key_fingerprint=$(ssh-keygen -lf "$key" 2>/dev/null | awk '{print $2}')
+          if ! ssh-add -l 2>/dev/null | grep -q "$key_fingerprint"; then
+            if ssh-add "$key" 2>/dev/null; then
+              echo "✅ Llave agregada: $(basename $key)"
+            fi
+          fi
+        fi
+      fi
+    done
+  fi
+fi
+
+# Alias útiles para SSH
+alias ssh-list='ssh-add -l'                    # Listar llaves cargadas
+alias ssh-clear='ssh-add -D'                   # Limpiar todas las llaves
+alias ssh-reload='                             # Recargar todas las llaves
+  ssh-add -D 2>/dev/null
+  for key in ~/.ssh/*; do
+    if [ -f "$key" ] && [[ ! "$key" =~ \.pub$ ]] && ssh-keygen -l -f "$key" &>/dev/null; then
+      ssh-add "$key" 2>/dev/null && echo "✅ $(basename $key)"
+    fi
+  done
+'
+
+alias ssh-github='ssh -T git@github.com'       # Test GitHub
+
+# --- zoxide ------------------------------------------------------------------
+# Reemplazo inteligente de cd
+if command -v zoxide >/dev/null 2>&1; then
+  eval "$(zoxide init zsh)"
+  
+  # Alias para compatibilidad
+  alias cd='z'
+  alias cdi='zi'                               # Interactive mode
+  alias zz='z -'                               # Ir al directorio anterior
+fi
+
 # --- Historial ---------------------------------------------------------------
 HISTSIZE=100000
 SAVEHIST=100000
@@ -838,6 +919,219 @@ configure_git() {
     fi
 }
 
+configure_ssh() {
+    step "Configurando SSH"
+    
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    
+    echo ""
+    echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}Configuración de SSH${NC}"
+    echo -e "${CYAN}════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    # Escanear llaves SSH existentes
+    info "Escaneando ~/.ssh/ en busca de llaves privadas..."
+    local ssh_keys=()
+    local key_names=()
+    
+    for key in ~/.ssh/*; do
+        if [ -f "$key" ] && [[ ! "$key" =~ \.pub$ ]] && [[ ! "$key" =~ known_hosts ]] && \
+           [[ ! "$key" =~ authorized_keys ]] && [[ ! "$key" =~ config ]] && [[ ! "$key" =~ agent ]]; then
+            if ssh-keygen -l -f "$key" &>/dev/null; then
+                ssh_keys+=("$key")
+                key_names+=("$(basename $key)")
+            fi
+        fi
+    done
+    
+    # Si no hay llaves, mostrar guía
+    if [ ${#ssh_keys[@]} -eq 0 ]; then
+        warning "No se encontraron llaves SSH en ~/.ssh/"
+        echo ""
+        echo -e "${YELLOW}Para usar SSH necesitas primero importar o generar llaves.${NC}"
+        echo ""
+        echo -e "${CYAN}Opciones:${NC}"
+        echo ""
+        echo -e "${BOLD}1. Generar nueva llave SSH:${NC}"
+        echo "   ssh-keygen -t ed25519 -C 'tu@email.com' -f ~/.ssh/mi_llave"
+        echo ""
+        echo -e "${BOLD}2. Importar llaves existentes:${NC}"
+        echo "   - Copia tus llaves a ~/.ssh/"
+        echo "   - Ajusta permisos: chmod 600 ~/.ssh/*"
+        echo "   - Ejemplo: scp usuario@otro-pc:~/.ssh/id_github ~/.ssh/"
+        echo ""
+        echo -e "${BOLD}3. Configurar después:${NC}"
+        echo "   Ejecuta: bash omarchy-setup.sh --ssh"
+        echo ""
+        
+        if ask_yes_no "¿Quieres generar una nueva llave SSH ahora?" "n"; then
+            echo ""
+            read -p "$(echo -e ${YELLOW}Email/Comentario: ${NC})" ssh_email
+            read -p "$(echo -e ${YELLOW}Nombre de archivo [id_ed25519]: ${NC})" ssh_filename
+            ssh_filename=${ssh_filename:-id_ed25519}
+            
+            info "Generando llave SSH..."
+            ssh-keygen -t ed25519 -C "${ssh_email:-$(whoami)@$(hostname)}" -f ~/.ssh/$ssh_filename
+            
+            success "Llave generada: ~/.ssh/$ssh_filename"
+            echo ""
+            echo -e "${YELLOW}Llave pública (comparte esta):${NC}"
+            cat ~/.ssh/$ssh_filename.pub
+            echo ""
+            warning "Vuelve a ejecutar el script para configurar SSH"
+        else
+            info "Configuración SSH saltada"
+            info "Ejecuta cuando tengas llaves: bash omarchy-setup.sh --ssh"
+        fi
+        
+        # Crear config mínimo
+        if [ ! -f ~/.ssh/config ]; then
+            cat > ~/.ssh/config << 'EOF'
+# SSH CONFIG
+
+Host *
+    AddKeysToAgent yes
+    IdentitiesOnly yes
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+EOF
+            chmod 600 ~/.ssh/config
+        fi
+        
+        mkdir -p ~/.ssh/agent
+        chmod 700 ~/.ssh/agent
+        
+        return
+    fi
+    
+    # Si hay llaves, mostrar y confirmar
+    success "Encontradas ${#ssh_keys[@]} llaves SSH:"
+    echo ""
+    for i in "${!key_names[@]}"; do
+        local fingerprint=$(ssh-keygen -l -f "${ssh_keys[$i]}" | awk '{print $2}')
+        local key_type=$(ssh-keygen -l -f "${ssh_keys[$i]}" | awk '{print $4}')
+        echo "  $((i+1)). ${CYAN}${key_names[$i]}${NC}"
+        echo "     Fingerprint: $fingerprint"
+        echo "     Tipo: $key_type"
+        echo ""
+    done
+    
+    if ! ask_yes_no "¿Son estas tus llaves correctas?" "y"; then
+        warning "Verifica tus llaves en ~/.ssh/"
+        info "Ejecuta después: bash omarchy-setup.sh --ssh"
+        return
+    fi
+    
+    echo ""
+    if ! ask_yes_no "¿Configurar SSH config con estas llaves?" "y"; then
+        info "Saltando configuración SSH"
+        info "Puedes configurar después: bash omarchy-setup.sh --ssh"
+        return
+    fi
+    
+    # Backup del config existente
+    if [ -f ~/.ssh/config ]; then
+        cp ~/.ssh/config ~/.ssh/config.backup.$(date +%Y%m%d_%H%M%S)
+        info "Backup creado: ~/.ssh/config.backup.*"
+    fi
+    
+    # Crear config base
+    cat > ~/.ssh/config << EOF
+# ===============================
+# SSH CONFIG - Omarchy Setup
+# ===============================
+# Generado: $(date '+%Y-%m-%d %H:%M:%S')
+
+# Configuración global
+Host *
+    AddKeysToAgent yes
+    IdentitiesOnly yes
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+EOF
+    
+    # Configurar cada llave interactivamente
+    echo ""
+    echo -e "${YELLOW}Configuración interactiva de llaves SSH${NC}"
+    echo "Presiona Enter para saltar cualquier llave"
+    echo ""
+    
+    local configured_count=0
+    
+    for i in "${!ssh_keys[@]}"; do
+        local key_file="${ssh_keys[$i]}"
+        local key_name="${key_names[$i]}"
+        
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Llave $((i+1))/${#ssh_keys[@]}: $key_name${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        
+        if ! ask_yes_no "  ¿Configurar esta llave?" "y"; then
+            info "  Saltando $key_name"
+            continue
+        fi
+        
+        # Pedir información del host
+        local host_alias=""
+        local hostname=""
+        local username=""
+        
+        read -p "$(echo -e ${YELLOW}  Alias del host (ej: github, vps, raspberry): ${NC})" host_alias
+        
+        if [ -z "$host_alias" ]; then
+            warning "  Sin alias, saltando..."
+            continue
+        fi
+        
+        read -p "$(echo -e ${YELLOW}  Hostname/IP: ${NC})" hostname
+        read -p "$(echo -e ${YELLOW}  Usuario: ${NC})" username
+        
+        # Agregar al config
+        {
+            echo ""
+            echo "# $host_alias"
+            echo "Host $host_alias"
+            [ -n "$hostname" ] && echo "    HostName $hostname"
+            [ -n "$username" ] && echo "    User $username"
+            echo "    IdentityFile $key_file"
+        } >> ~/.ssh/config
+        
+        log "SSH host configured: $host_alias -> $hostname (key: $key_name)"
+        success "  ✓ Configurado: $host_alias"
+        configured_count=$((configured_count + 1))
+    done
+    
+    chmod 600 ~/.ssh/config
+    
+    # Crear directorio del agente
+    mkdir -p ~/.ssh/agent
+    chmod 700 ~/.ssh/agent
+    
+    echo ""
+    success "SSH configurado ($configured_count hosts)"
+    echo ""
+    info "Comandos disponibles:"
+    echo "  ssh-list      - Ver llaves cargadas"
+    echo "  ssh-clear     - Limpiar todas"
+    echo "  ssh-reload    - Recargar llaves"
+    
+    if [ $configured_count -gt 0 ]; then
+        echo ""
+        info "Conexiones SSH configuradas:"
+        grep "^Host " ~/.ssh/config | grep -v "Host \*" | while read -r line; do
+            local host=$(echo $line | awk '{print $2}')
+            echo "  ssh $host"
+        done
+    fi
+    
+    echo ""
+    info "Edita manualmente: nano ~/.ssh/config"
+}
+
 configure_npm() {
     step "Configurando NPM"
     
@@ -870,6 +1164,65 @@ set_default_shell() {
 # MAIN
 # =============================================================================
 
+# Mostrar ayuda
+if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}${BOLD}          OMARCHY ZSH SETUP v2.1 - Ayuda${NC}                     ${CYAN}║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${BOLD}Uso:${NC}"
+    echo "  bash omarchy-setup.sh          # Instalación completa"
+    echo "  bash omarchy-setup.sh --ssh    # Solo configurar SSH"
+    echo "  bash omarchy-setup.sh --help   # Mostrar esta ayuda"
+    echo ""
+    echo -e "${BOLD}Instalación completa incluye:${NC}"
+    echo "  • Zsh + Oh My Zsh + Oh My Posh (tema Catppuccin)"
+    echo "  • zoxide (cd inteligente)"
+    echo "  • Google Chrome"
+    echo "  • LocalSend"
+    echo "  • Drivers Epson L4150 + Scan"
+    echo "  • ZeroTier One"
+    echo "  • Emoji Launcher (SUPER+.)"
+    echo "  • GNOME Keyring + SSH Agent automático"
+    echo "  • Go, Git, Docker, Node, Python, yt-dlp"
+    echo ""
+    echo -e "${BOLD}Modo --ssh:${NC}"
+    echo "  Configura SSH de forma interactiva:"
+    echo "  • Escanea llaves en ~/.ssh/"
+    echo "  • Genera ~/.ssh/config"
+    echo "  • Configura ssh-agent automático"
+    echo ""
+    echo -e "${BOLD}Logs:${NC}"
+    echo "  ~/omarchy-setup.log       # Log completo"
+    echo "  ~/omarchy-errors.log      # Solo errores"
+    echo ""
+    echo -e "${BOLD}GitHub:${NC} https://github.com/marcogll/scripts_mg"
+    echo ""
+    exit 0
+fi
+
+# Modo SSH-only
+if [ "$1" == "--ssh" ]; then
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}${BOLD}     OMARCHY SSH SETUP - Solo configuración SSH${NC}              ${CYAN}║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    setup_logging
+    
+    CURRENT_STEP=0
+    TOTAL_STEPS=1
+    
+    configure_ssh
+    
+    echo ""
+    echo -e "${GREEN}✓ Configuración SSH completada${NC}"
+    echo ""
+    info "Logs: $LOG_FILE"
+    echo ""
+    exit 0
+fi
+
 main() {
     setup_logging
     print_header
@@ -877,12 +1230,13 @@ main() {
     echo -e "${BOLD}Este script instalará:${NC}"
     echo ""
     echo "  • Zsh + Oh My Zsh + Oh My Posh (Catppuccin)"
+    echo "  • zoxide (cd inteligente)"
     echo "  • Google Chrome (remueve omarchy-chromium)"
     echo "  • LocalSend (compartir archivos)"
     echo "  • Drivers Epson L4150 + Scan"
     echo "  • ZeroTier One"
     echo "  • Emoji Launcher (SUPER+.)"
-    echo "  • GNOME Keyring"
+    echo "  • GNOME Keyring + SSH Agent"
     echo "  • Go, Git, Docker, Node, Python, yt-dlp"
     echo ""
     
@@ -906,6 +1260,7 @@ main() {
     create_zshrc
     configure_permissions
     configure_git
+    configure_ssh
     configure_npm
     setup_directories
     set_default_shell
