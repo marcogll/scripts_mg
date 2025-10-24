@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-#                   OMARCHY ZSH SETUP SCRIPT v2.0
+#                   OMARCHY ZSH SETUP SCRIPT v2.1
 # =============================================================================
 # GitHub: https://github.com/marcogll/scripts_mg
 # Instalación: bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/omarchy-setup.sh)
@@ -24,6 +24,36 @@ ZEROTIER_NETWORK=""
 KEYRING_PASSWORD=""
 NEEDS_REBOOT=false
 
+# Logging
+LOG_FILE="$HOME/omarchy-setup.log"
+ERROR_LOG="$HOME/omarchy-errors.log"
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+setup_logging() {
+    # Crear archivos de log
+    : > "$LOG_FILE"
+    : > "$ERROR_LOG"
+    
+    # Redirigir stdout y stderr
+    exec > >(tee -a "$LOG_FILE")
+    exec 2> >(tee -a "$ERROR_LOG" >&2)
+    
+    log "==================================================================="
+    log "OMARCHY SETUP v2.1 - $(date '+%Y-%m-%d %H:%M:%S')"
+    log "==================================================================="
+}
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+    echo "[$(date '+%H:%M:%S')] ERROR: $*" | tee -a "$ERROR_LOG" >&2
+}
+
 # =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
@@ -31,8 +61,11 @@ NEEDS_REBOOT=false
 print_header() {
     clear
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}${BOLD}        OMARCHY ZSH SETUP v2.0 - Setup Completo${NC}             ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}${BOLD}        OMARCHY ZSH SETUP v2.1 - Setup Completo${NC}             ${CYAN}║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${CYAN}Logs:${NC} $LOG_FILE"
+    echo -e "${CYAN}Errores:${NC} $ERROR_LOG"
     echo ""
 }
 
@@ -53,15 +86,31 @@ progress_bar() {
 step() {
     CURRENT_STEP=$((CURRENT_STEP + 1))
     echo ""
+    log "STEP ${CURRENT_STEP}/${TOTAL_STEPS}: $1"
     echo -e "${GREEN}[${CURRENT_STEP}/${TOTAL_STEPS}]${NC} ${BOLD}$1${NC}"
     progress_bar $CURRENT_STEP $TOTAL_STEPS "$1"
     echo ""
 }
 
-success() { echo -e "${GREEN}✓${NC} $1"; }
-warning() { echo -e "${YELLOW}⚠${NC} $1"; }
-error() { echo -e "${RED}✗${NC} $1"; }
-info() { echo -e "${CYAN}ℹ${NC} $1"; }
+success() { 
+    echo -e "${GREEN}✓${NC} $1"
+    log "SUCCESS: $1"
+}
+
+warning() { 
+    echo -e "${YELLOW}⚠${NC} $1"
+    log "WARNING: $1"
+}
+
+error() { 
+    echo -e "${RED}✗${NC} $1"
+    log_error "$1"
+}
+
+info() { 
+    echo -e "${CYAN}ℹ${NC} $1"
+    log "INFO: $1"
+}
 
 ask_yes_no() {
     local prompt="$1"
@@ -77,8 +126,8 @@ ask_yes_no() {
         read -p "$(echo -e ${YELLOW}$prompt${NC})" response
         response=${response:-$default}
         case $response in
-            [Yy]* ) return 0;;
-            [Nn]* ) return 1;;
+            [Yy]* ) log "USER: $prompt -> YES"; return 0;;
+            [Nn]* ) log "USER: $prompt -> NO"; return 1;;
             * ) echo "Por favor responde sí (y) o no (n).";;
         esac
     done
@@ -154,9 +203,14 @@ install_packages() {
     fi
     
     info "Instalando ${#to_install[@]} paquetes nuevos..."
-    sudo pacman -S --noconfirm --needed "${to_install[@]}"
+    log "Paquetes a instalar: ${to_install[*]}"
     
-    success "Paquetes instalados: ${#to_install[@]}"
+    if sudo pacman -S --noconfirm --needed "${to_install[@]}"; then
+        success "Paquetes instalados: ${#to_install[@]}"
+    else
+        error "Fallo al instalar algunos paquetes"
+        log_error "Paquetes que fallaron: revisar log de pacman"
+    fi
 }
 
 install_yay() {
@@ -174,10 +228,14 @@ install_yay() {
     cd yay
     
     info "Compilando yay..."
-    makepkg -si --noconfirm --nocheck
-    cd ~
-    
-    success "yay instalado"
+    if makepkg -si --noconfirm --nocheck; then
+        cd ~
+        success "yay instalado"
+    else
+        cd ~
+        error "Fallo al instalar yay"
+        exit 1
+    fi
 }
 
 install_oh_my_posh() {
@@ -188,10 +246,37 @@ install_oh_my_posh() {
         return
     fi
     
-    info "Instalando oh-my-posh-bin desde AUR..."
-    yay -S --noconfirm oh-my-posh-bin
+    info "Intentando instalar oh-my-posh-bin desde AUR..."
+    log "Método 1: Instalación desde AUR"
     
-    success "Oh My Posh instalado"
+    if yay -S --noconfirm oh-my-posh-bin 2>&1 | tee -a "$LOG_FILE"; then
+        success "Oh My Posh instalado desde AUR"
+        return
+    fi
+    
+    warning "Fallo instalación desde AUR, intentando con script oficial..."
+    log "Método 2: Script de instalación oficial"
+    
+    info "Descargando e instalando Oh My Posh..."
+    if curl -s https://ohmyposh.dev/install.sh | bash -s 2>&1 | tee -a "$LOG_FILE"; then
+        # Agregar al PATH si se instaló en ~/.local/bin
+        export PATH="$HOME/.local/bin:$PATH"
+        
+        if command -v oh-my-posh &> /dev/null; then
+            success "Oh My Posh instalado con script oficial"
+            
+            # Asegurar que esté en el PATH permanentemente
+            if ! grep -q ".local/bin" "$HOME/.zshrc" 2>/dev/null; then
+                info "Agregando ~/.local/bin al PATH..."
+            fi
+        else
+            error "Fallo al instalar Oh My Posh"
+            warning "Continuando sin Oh My Posh (puedes instalarlo después)"
+        fi
+    else
+        error "Fallo al instalar Oh My Posh con script oficial"
+        warning "Continuando sin Oh My Posh"
+    fi
 }
 
 install_google_chrome() {
@@ -208,8 +293,11 @@ install_google_chrome() {
         success "Google Chrome ya está instalado"
     else
         info "Instalando Google Chrome desde AUR..."
-        yay -S --noconfirm google-chrome
-        success "Google Chrome instalado"
+        if yay -S --noconfirm google-chrome; then
+            success "Google Chrome instalado"
+        else
+            error "Fallo al instalar Google Chrome"
+        fi
     fi
 }
 
@@ -222,10 +310,12 @@ install_localsend() {
     fi
     
     info "Instalando LocalSend desde AUR..."
-    yay -S --noconfirm localsend-bin
-    
-    success "LocalSend instalado"
-    info "Abre LocalSend desde el menú de aplicaciones"
+    if yay -S --noconfirm localsend-bin; then
+        success "LocalSend instalado"
+        info "Abre LocalSend desde el menú de aplicaciones"
+    else
+        error "Fallo al instalar LocalSend"
+    fi
 }
 
 install_emoji_launcher() {
@@ -307,6 +397,7 @@ install_zerotier() {
     
     if ask_yes_no "¿Conectarse a tu red ZeroTier?" "y"; then
         read -p "$(echo -e ${YELLOW}Network ID: ${NC})" ZEROTIER_NETWORK
+        log "ZeroTier Network ID: $ZEROTIER_NETWORK"
         
         if [ ! -z "$ZEROTIER_NETWORK" ]; then
             info "Conectando..."
@@ -338,6 +429,7 @@ configure_gnome_keyring() {
         echo "  3. Personalizada"
         echo ""
         read -p "$(echo -e ${YELLOW}Selecciona [1/2/3]: ${NC})" keyring_option
+        log "Keyring option: $keyring_option"
         
         case "$keyring_option" in
             2)
@@ -426,7 +518,7 @@ create_zshrc() {
     
     cat > "$HOME/.zshrc" << 'ZSHRC_EOF'
 # =============================================================================
-#                    CONFIGURACIÓN ZSH - OMARCHY v2.0
+#                    CONFIGURACIÓN ZSH - OMARCHY v2.1
 # =============================================================================
 
 # --- PATH --------------------------------------------------------------------
@@ -507,6 +599,10 @@ alias l='ls -CF'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
+
+# System info
+alias ff='fastfetch'
+alias nf='fastfetch'
 
 # Arch
 alias pacu='sudo pacman -Syu'
@@ -731,6 +827,7 @@ configure_git() {
     if ask_yes_no "¿Configurar Git?" "y"; then
         read -p "$(echo -e ${YELLOW}Nombre: ${NC})" git_name
         read -p "$(echo -e ${YELLOW}Email: ${NC})" git_email
+        log "Git config: $git_name <$git_email>"
         
         git config --global user.name "$git_name"
         git config --global user.email "$git_email"
@@ -774,6 +871,7 @@ set_default_shell() {
 # =============================================================================
 
 main() {
+    setup_logging
     print_header
     
     echo -e "${BOLD}Este script instalará:${NC}"
@@ -813,7 +911,14 @@ main() {
     set_default_shell
     
     echo ""
+    log "==================================================================="
+    log "INSTALACIÓN COMPLETADA - $(date '+%Y-%m-%d %H:%M:%S')"
+    log "==================================================================="
     echo -e "${GREEN}✓✓✓ Instalación completada ✓✓✓${NC}"
+    echo ""
+    echo -e "${CYAN}📋 Logs guardados en:${NC}"
+    echo -e "   ${BOLD}$LOG_FILE${NC}"
+    echo -e "   ${BOLD}$ERROR_LOG${NC}"
     echo ""
     
     if [ "$NEEDS_REBOOT" = true ]; then
@@ -833,12 +938,12 @@ main() {
             sleep 3
             sudo reboot
         else
-            warning "Recuerda reiniciar manualmente para aplicar todos los cambios"
+            warning "Recuerda reiniciar manualmente"
         fi
     else
         echo -e "${CYAN}Próximos pasos:${NC}"
         echo "  1. Cierra esta terminal"
-        echo "  2. Abre una nueva terminal"
+        echo "  2. Abre una nueva"
         echo "  3. Ejecuta: source ~/.zshrc"
     fi
     
