@@ -1080,8 +1080,7 @@ EOF
         local hostname=""
         local username=""
         
-        read -p "$(echo -e ${YELLOW}  Alias del host (ej: github, vps, raspberry): ${NC})" host_alias
-        
+        read -p "$(echo -e ${YELLOW}  Alias del host \(ej: github, vps, raspberry\): ${NC})" host_alias        
         if [ -z "$host_alias" ]; then
             warning "  Sin alias, saltando..."
             continue
