@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-#                   OMARCHY ZSH SETUP SCRIPT v2.1
+#                   OMARCHY ZSH SETUP SCRIPT v2.3
 # =============================================================================
 # GitHub: https://github.com/marcogll/scripts_mg
 # Instalación: bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/omarchy-setup.sh)
