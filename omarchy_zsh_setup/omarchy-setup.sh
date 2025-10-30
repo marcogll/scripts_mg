@@ -285,27 +285,6 @@ install_oh_my_posh() {
     fi
 }
 
-install_google_chrome() {
-    step "Instalando Google Chrome"
-    
-    for chromium_pkg in omarchy-chromium chromium; do
-        if check_installed "$chromium_pkg"; then
-            info "Removiendo $chromium_pkg..."
-            sudo pacman -Rns --noconfirm "$chromium_pkg" 2>/dev/null || true
-        fi
-    done
-    
-    if command -v google-chrome-stable &> /dev/null; then
-        success "Google Chrome ya está instalado"
-    else
-        info "Instalando Google Chrome desde AUR..."
-        if yay -S --noconfirm google-chrome; then
-            success "Google Chrome instalado"
-        else
-            error "Fallo al instalar Google Chrome"
-        fi
-    fi
-}
 
 install_localsend() {
     step "Instalando LocalSend"
