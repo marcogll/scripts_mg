@@ -1,6 +1,8 @@
-# 🚀 Omarchy Zsh Setup Script
+# 🚀 Omarchy Zsh Setup Script v2.8.1
 
 Script de instalación y configuración completa para **Omarchy Linux** con Zsh, Oh My Posh, y todas las herramientas esenciales.
+
+Versión unificada que combina la estética Catppuccin con la robustez y características de versiones anteriores.
 
 ## ⚡ Instalación rápida
 
@@ -14,33 +16,31 @@ bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/oma
 
 ### 🎨 Terminal y Shell
 - **Zsh** + **Oh My Zsh** + plugins (autosuggestions, syntax-highlighting)
-- **Oh My Posh** con tema Catppuccin
-- Aliases útiles para Arch, Git, Docker, NPM, Python
-
-### 🌐 Navegador
-- Instala **Google Chrome** desde AUR
-- Remueve **omarchy-chromium** automáticamente
-
-### 🖨️ Impresora
-- Drivers oficiales **Epson L4150** (ESC/P-R)
-- CUPS configurado y listo para conectar
-- Acceso web: `http://localhost:631`
+- **Oh My Posh** con tema Catppuccin Frappe desde AUR
+- Configuración `.zshrc` personalizada desde GitHub
+- Aliases útiles para Arch, Git, Docker, NPM, Python, ZeroTier
 
 ### 🔐 Seguridad y Red
-- **ZeroTier One** con conexión interactiva
-- **GNOME Keyring** configurado (para Git, VS Code)
-- Opciones: sin contraseña, contraseña de usuario, o personalizada
-
-### 😊 Utilidades
-- **Emoji Launcher** (rofimoji) - Presiona `SUPER + .`
-- **yt-dlp** para descargar audio/video de YouTube
-- Thumbnails en Nautilus para imágenes/videos/PDFs
+- **ZeroTier One** con configuración interactiva desde AUR
+- **GNOME Keyring** configurado para Git/SSH
+- Configuración automática de claves SSH con el agente
 
 ### 🛠️ Desarrollo
 - Git, Docker, Docker Compose
-- Node.js, NPM (global en `~/.npm-global`)
-- Python, pip, virtualenv
-- Soporte para NVM
+- Node.js, NPM
+- Python, pip, virtualenv, Go
+- **yay** (AUR helper)
+
+### 😊 Utilidades
+- **yt-dlp** para descargar audio/video de YouTube
+- Fastfetch, htop, btop para monitoreo del sistema
+- eza, bat, zoxide, tree para navegación mejorada
+- playerctl, brightnessctl, pamixer para control multimedia
+
+### 📦 Servicios
+- **Docker** configurado y usuario añadido al grupo
+- **TeamViewer** servicio habilitado
+- **ZeroTier One** VPN configurada
 
 ---
 
@@ -50,37 +50,43 @@ bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/oma
 <summary>Ver lista completa (click para expandir)</summary>
 
 ### Sistema Base
-- zsh, oh-my-zsh, oh-my-posh
-- git, curl, wget
-- yay (AUR helper)
+- **zsh**, **zsh-completions**
+- **oh-my-posh-bin** (desde AUR)
+- **git**, **curl**, **wget**
+- **yay** (AUR helper, compilado desde AUR)
 
 ### Desarrollo
-- python, python-pip, python-virtualenv
-- nodejs, npm
-- docker, docker-compose
+- **python**, **python-pip**, **python-virtualenv**
+- **nodejs**, **npm**
+- **go** (Golang)
+- **docker**, **docker-compose**
+- **base-devel** (herramientas de compilación)
 
-### Multimedia
-- yt-dlp, ffmpeg
-- tumbler, ffmpegthumbnailer
-- gst-plugins-{good,bad,ugly}
-- libheif, webp-pixbuf-loader
+### Utilidades de Terminal
+- **eza** (ls mejorado)
+- **bat** (cat mejorado)
+- **zoxide** (cd inteligente)
+- **fastfetch** (info del sistema)
+- **htop**, **btop** (monitores del sistema)
+- **tree** (visualización de directorios)
 
-### Utilidades
-- playerctl, brightnessctl, pamixer
-- neofetch, htop, btop
-- tree, unzip, p7zip, unrar
-- rofi, wl-clipboard, rofimoji
+### Multimedia y Control
+- **yt-dlp**, **ffmpeg**
+- **playerctl**, **brightnessctl**, **pamixer**
+- **audacity**, **inkscape**
 
 ### Red y Seguridad
-- zerotier-one
-- gnome-keyring, libsecret, seahorse
-- lsof, net-tools
+- **zerotier-one** (desde AUR)
+- **gnome-keyring**, **libsecret**, **seahorse**
+- **lsof**, **net-tools**
+- **teamviewer**
 
-### Impresión
-- cups, cups-pdf
-- system-config-printer
-- gutenprint
-- epson-inkjet-printer-escpr{,2}
+### Utilidades del Sistema
+- **nano**, **unzip**, **tar**
+- **p7zip**, **unrar**
+
+### Instalaciones Adicionales
+- **speedtest-cli** (vía pip)
 
 </details>
 
@@ -88,35 +94,42 @@ bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/oma
 
 ## 🎯 Durante la instalación
 
-El script te preguntará:
+El script ejecuta los siguientes pasos:
 
-1. **¿Continuar con la instalación?** (Y/n)
-2. **ZeroTier Network ID** - Tu red privada (opcional)
-3. **GNOME Keyring:**
-   - Sin contraseña (más conveniente)
-   - Igual a tu contraseña de usuario (recomendado)
-   - Contraseña personalizada
-4. **Configuración de Git** - Nombre y email (opcional)
+1. **Verificación de requerimientos** (root, Arch Linux, conexión a Internet)
+2. **Instalación de paquetes base** desde repositorios oficiales
+3. **Instalación de yay** desde AUR (si no está instalado)
+4. **Configuración de Docker** (servicio y permisos de usuario)
+5. **Instalación de Oh My Zsh y plugins**
+6. **Configuración de .zshrc y tema Catppuccin** desde GitHub
+7. **Configuración de TeamViewer** (servicio)
+8. **Instalación de ZeroTier One** desde AUR (opcional)
+9. **Configuración de GNOME Keyring** (opcional)
+10. **Configuración de claves SSH** (opcional)
+
+### Preguntas interactivas:
+
+- **ZeroTier Network ID**: Si deseas unirte a una red ZeroTier (opcional)
+- **GNOME Keyring**: Si deseas configurar el almacén de contraseñas
+- **Claves SSH**: Si deseas añadir claves SSH existentes al agente
 
 ---
 
 ## 🔑 GNOME Keyring
 
-El keyring guarda contraseñas de:
-- Git (credential helper)
-- VS Code
-- SSH keys
-- Aplicaciones GNOME
+El keyring guarda contraseñas de forma segura:
+- **Git** (credential helper)
+- **SSH keys** (almacenadas de forma segura)
+- **Aplicaciones GNOME**
 
-### Opciones recomendadas:
+### Configuración automática:
 
-| Opción | Seguridad | Conveniencia | Recomendado para |
-|--------|-----------|--------------|------------------|
-| Sin contraseña | Baja | Alta | Laptop personal |
-| Contraseña de usuario | Alta | Alta | Uso general ⭐ |
-| Contraseña personalizada | Alta | Media | Datos sensibles |
+El script configura automáticamente:
+- PAM para auto-desbloqueo del keyring
+- Inicio automático de gnome-keyring-daemon
+- Integración con SSH agent
 
-### Configuración post-instalación:
+### Comandos útiles:
 
 ```bash
 # Abrir gestor de contraseñas
@@ -125,10 +138,10 @@ seahorse
 # Ver estado del keyring
 gnome-keyring-daemon --version
 
-# Comandos de ZeroTier
-zt              # Alias de zerotier-cli
-ztstatus        # Ver redes conectadas
-ztinfo          # Info del nodo
+# Comandos de ZeroTier (aliases en .zshrc)
+zt              # Alias de sudo zerotier-cli
+ztstatus        # Ver redes conectadas (listnetworks)
+ztinfo          # Info del nodo (info)
 ```
 
 ---
@@ -183,11 +196,13 @@ pipf            # pip freeze > requirements.txt
 ```bash
 ytm <URL>           # Descargar audio MP3 320kbps
 ytm "lofi beats"    # Buscar y descargar
-ytv <URL>           # Descargar video MP4
-ytv "tutorial"      # Buscar y descargar video
+ytv <URL>           # Descargar video MP4 (calidad por defecto)
+ytv <URL> 1080      # Descargar video en 1080p
+ytv <URL> 720       # Descargar video en 720p
+ytls                # Listar últimos descargas
 ```
 
-Descargas en: `~/Videos/ytdlp/`
+Descargas en: `~/Videos/YouTube/{Music,Videos}/`
 
 ### NPM
 ```bash
@@ -208,43 +223,6 @@ killport <port>     # Matar proceso en puerto
 serve [port]        # Servidor HTTP (default 8000)
 clima               # Ver clima Saltillo
 ```
-
----
-
-## 🎨 Emoji Launcher
-
-Presiona **SUPER + .** (tecla Windows + punto) para abrir el selector de emojis.
-
-- Busca por nombre: "heart", "smile", "rocket"
-- Navega con flechas
-- Enter para copiar al portapapeles
-- Compatible con Wayland/Hyprland
-
----
-
-## 🖨️ Configurar Impresora Epson L4150
-
-### Opción 1: Interfaz web (recomendado)
-
-```bash
-# Abrir en navegador
-http://localhost:631
-
-# Ir a: Administration → Add Printer
-# Buscar: Epson L4150
-# Seleccionar driver: Epson L4150 Series
-```
-
-### Opción 2: Herramienta gráfica
-
-```bash
-system-config-printer
-```
-
-### Conexión:
-- **USB**: Detecta automáticamente
-- **WiFi**: Buscar impresoras de red
-- **IP**: Usar dirección IP de la impresora
 
 ---
 
@@ -283,31 +261,36 @@ ztinfo
 
 ```
 $HOME/
-├── .zshrc                          # Configuración de Zsh
-├── .zshrc.local                   # Config local (opcional)
+├── .zshrc                          # Configuración de Zsh (descargado desde GitHub)
+├── .zshrc.local                   # Config local (opcional, no creado automáticamente)
 ├── .oh-my-zsh/                    # Oh My Zsh
 │   └── custom/plugins/            # Plugins adicionales
+│       ├── zsh-autosuggestions/
+│       └── zsh-syntax-highlighting/
 ├── .poshthemes/                   # Temas Oh My Posh
-│   └── catppuccin.omp.json
-├── .npm-global/                   # NPM global packages
-├── .zsh_functions/                # Funciones personalizadas
-├── AppImages/                     # Aplicaciones AppImage
-├── Videos/ytdlp/                  # Descargas de yt-dlp
-└── Projects/                      # Tus proyectos
+│   └── catppuccin.omp.json        # Tema Catppuccin Frappe
+├── .zsh_functions/                # Funciones personalizadas (directorio creado)
+├── Videos/YouTube/                # Descargas de yt-dlp
+│   ├── Music/                     # Audios MP3
+│   └── Videos/                    # Videos MP4
+├── .ssh/                          # Claves SSH (si existen)
+└── omarchy-setup.log             # Log de instalación
 ```
 
 ---
 
 ## 🔄 Después de la instalación
 
-### 1. Reiniciar sesión (IMPORTANTE)
+### 1. Reiniciar sesión o terminal (IMPORTANTE)
+
+**⚠️ REINICIO REQUERIDO** si se instalaron servicios como TeamViewer o ZeroTier.
 
 ```bash
-# Cerrar sesión y volver a entrar
-# Esto aplica:
+# Cerrar y volver a abrir la terminal para usar Zsh
+# O cerrar sesión y volver a entrar para aplicar:
 # - Cambio de shell a Zsh
-# - Grupos (docker, video, lp)
-# - Permisos de brillo
+# - Grupos (docker)
+# - Permisos del sistema
 ```
 
 ### 2. Verificar instalación
@@ -316,11 +299,17 @@ $HOME/
 # Ver versión de Zsh
 zsh --version
 
-# Ver tema
+# Ver tema Oh My Posh
 oh-my-posh version
 
-# Ver ZeroTier
+# Verificar Docker
+docker ps
+
+# Ver ZeroTier (si se configuró)
 ztstatus
+
+# Ver TeamViewer (si se instaló)
+teamviewer info
 
 # Actualizar sistema
 pacu
@@ -342,13 +331,17 @@ alias miproyecto="cd ~/Projects/mi-app && code ."
 
 ## 🛠️ Solución de problemas
 
-### Las teclas Fn de brillo no funcionan
+### Docker no funciona sin sudo
 
 ```bash
-# Verificar permisos
-groups  # Debe incluir 'video'
+# Verificar que estás en el grupo docker
+groups  # Debe incluir 'docker'
 
-# Reiniciar sesión si no aparece
+# Si no aparece, reinicia sesión o ejecuta:
+newgrp docker
+
+# Verificar acceso
+docker ps
 ```
 
 ### Git sigue pidiendo contraseña
@@ -364,44 +357,56 @@ git config --global credential.helper libsecret
 
 # Abrir Seahorse y verificar keyring
 seahorse
+
+# Verificar que el keyring está corriendo
+pgrep -u "$USER" gnome-keyring-daemon
 ```
 
 ### ZeroTier no conecta
 
 ```bash
+# Verificar servicio
+sudo systemctl status zerotier-one
+
 # Ver logs
 sudo journalctl -u zerotier-one -f
 
 # Reiniciar servicio
 sudo systemctl restart zerotier-one
 
-# Verificar que autorizaste en https://my.zerotier.com
+# Verificar que autorizaste el nodo en https://my.zerotier.com
+ztinfo
+ztstatus
 ```
 
-### Emoji launcher no abre
+### Oh My Posh no se muestra correctamente
 
 ```bash
 # Verificar instalación
-which rofimoji
+which oh-my-posh
+oh-my-posh version
 
-# Recargar Hyprland
-hyprctl reload
+# Verificar que el tema existe
+ls ~/.poshthemes/catppuccin.omp.json
 
-# Probar desde terminal
-rofimoji
+# Verificar que tienes una Nerd Font instalada
+# (El script NO instala fuentes automáticamente)
+fc-list | grep -i nerd
+
+# Si no tienes Nerd Font, instala una:
+# - Nerd Fonts: https://www.nerdfonts.com/
 ```
 
-### Impresora no detectada
+### El shell no cambió a Zsh
 
 ```bash
-# Verificar servicio CUPS
-sudo systemctl status cups
+# Verificar shell actual
+echo $SHELL
 
-# Reiniciar CUPS
-sudo systemctl restart cups
+# Cambiar manualmente
+chsh -s $(which zsh)
 
-# Ver impresoras detectadas
-lpstat -p -d
+# Cerrar y abrir nueva terminal
 ```
 
 ---
@@ -411,9 +416,11 @@ lpstat -p -d
 - **Arch Wiki**: https://wiki.archlinux.org/
 - **Oh My Zsh**: https://ohmyz.sh/
 - **Oh My Posh**: https://ohmyposh.dev/
+- **Catppuccin Theme**: https://github.com/catppuccin/catppuccin
 - **ZeroTier**: https://www.zerotier.com/
 - **yt-dlp**: https://github.com/yt-dlp/yt-dlp
-- **Epson Drivers**: https://aur.archlinux.org/packages/epson-inkjet-printer-escpr
+- **Nerd Fonts**: https://www.nerdfonts.com/ (requerido para iconos del prompt)
+- **yay AUR Helper**: https://github.com/Jguer/yay
 
 ---
 
@@ -430,15 +437,17 @@ Si encuentras problemas:
 
 ## 📝 Changelog
 
-### v1.0.0 (2025-01-21)
-- Instalación inicial de Zsh + Oh My Posh
-- Google Chrome reemplaza omarchy-chromium
-- Drivers Epson L4150
-- ZeroTier One con configuración interactiva
-- GNOME Keyring con opciones de contraseña
-- Emoji Launcher (rofimoji)
-- Thumbnails en Nautilus
-- Aliases y funciones útiles
+### v2.8.1 (2025-11-02)
+- Versión unificada con estética Catppuccin
+- Instalación mejorada de paquetes con manejo de errores robusto
+- **oh-my-posh** instalado desde AUR automáticamente
+- Configuración `.zshrc` descargada desde GitHub
+- Instalación de plugins Zsh mejorada
+- Configuración de ZeroTier One desde AUR
+- Configuración opcional de GNOME Keyring y SSH
+- **Nota importante**: Instalación de Nerd Fonts omitida (requiere instalación manual)
+- Script no se detiene ante errores menores, continúa con advertencias
+- Mejor manejo de errores en instalación de paquetes individuales
 
 ---
 
@@ -456,13 +465,16 @@ MIT License - Libre de usar y modificar
 
 ---
 
-## ⭐ ¿Te gustó?
-
-Si este script te fue útil, dale una estrella ⭐ al repo!
 
 ```bash
 # Instalar en una línea
 bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/omarchy-setup.sh)
 ```
 
-🚀 **¡Disfruta tu nuevo setup de Omarchy!**
+## 📝 Notas importantes
+
+- **Fuentes Nerd Font**: El script NO instala fuentes automáticamente. Asegúrate de tener una Nerd Font instalada manualmente para que los iconos del prompt se vean correctamente.
+- **Reinicio requerido**: Si se instalaron servicios como TeamViewer o ZeroTier, se recomienda reiniciar el sistema.
+- **Shell por defecto**: El script verifica si zsh es el shell por defecto, pero no lo cambia automáticamente para evitar bloqueos. Ejecuta manualmente `chsh -s $(which zsh)` si es necesario.
+
+🚀 **¡Disfruta tu nuevo setup de Omarchy con Catppuccin!**
