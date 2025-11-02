@@ -1,221 +1,188 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# =============================================================================
+#     Omarchy Setup Script v2.5 (Omarchy-MG Edition)
+#     Autor: Marco G. / 2025
+#     Descripción:
+#       Script de automatización para configurar un entorno Zsh completo
+#       con Oh My Zsh, Oh My Posh, Docker, TeamViewer, Inkscape, Audacity,
+#       y utilidades esenciales. Compatible con Arch Linux.
+# =============================================================================
 
-# ================================================================
-# Omarchy Zsh Setup Script v2.4
-# Author: Marco G
-# Description: Automated Zsh environment setup for Arch/Omarchy Linux
-# ================================================================
+set -euo pipefail
 
-set -Eeo pipefail
-
-LOG_FILE="omarchy-setup.log"
-ERROR_LOG="omarchy-errors.log"
-START_TIME=$(date +%s)
-NEEDS_REBOOT=false
-
-# Colors
+# =============================================================================
+# COLORES Y UTILIDADES DE LOGGING
+# =============================================================================
 GREEN="\e[32m"
 YELLOW="\e[33m"
 RED="\e[31m"
-BLUE="\e[34m"
-NC="\e[0m"
+RESET="\e[0m"
 
-# Logging
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"; }
-error() { echo -e "${RED}✗${NC} $1" | tee -a "$ERROR_LOG" >&2; }
-success() { echo -e "${GREEN}✓${NC} $1"; log "SUCCESS: $1"; printf '\a'; }
-step() { echo -e "\n${BLUE}→${NC} $1"; log "STEP: $1"; }
+step()    { echo -e "\n${YELLOW}→ $1${RESET}"; sleep 0.3; }
+success() { echo -e "${GREEN}✓ $1${RESET}"; }
+error()   { echo -e "${RED}✗ $1${RESET}" >&2; }
+log()     { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
 
-# Progress bar
-progress_bar() {
-  local duration=$1
-  local interval=0.2
-  local elapsed=0
-  echo -n "["
-  while (( $(echo "$elapsed < $duration" | bc -l) )); do
-    echo -n "#"
-    sleep $interval
-    elapsed=$(echo "$elapsed + $interval" | bc)
-  done
-  echo "]"
-}
-
-# Internet check
+# =============================================================================
+# FUNCIÓN: Verificar conexión a Internet
+# =============================================================================
 check_internet() {
-  if ! ping -c1 archlinux.org &>/dev/null; then
+  step "Verificando conexión a Internet..."
+  if ! ping -c 1 archlinux.org &>/dev/null; then
     error "Sin conexión a Internet. Abortando instalación."
     exit 1
   fi
+  success "Conexión a Internet verificada."
 }
 
-# Package installation
-yay_install() {
-  local packages=($@)
-  for pkg in "${packages[@]}"; do
-    if ! pacman -Qi $pkg &>/dev/null; then
-      yay -S --noconfirm --needed $pkg || error "Error instalando $pkg"
-    else
-      log "$pkg ya está instalado."
-    fi
-  done
-}
-
-# Install yay if missing
-install_yay() {
-  if ! command -v yay &>/dev/null; then
-    step "Instalando yay desde AUR..."
-    mkdir -p /tmp/yay
-    cd /tmp/yay
-    git clone https://aur.archlinux.org/yay.git .
-    makepkg -si --noconfirm
-    cd - >/dev/null
-    rm -rf /tmp/yay
-    success "yay instalado correctamente."
-  else
-    log "yay ya está instalado."
-  fi
-}
-
-# Base system packages
+# =============================================================================
+# FUNCIÓN: Actualizar sistema y dependencias base
+# =============================================================================
 install_base_packages() {
-  step "Instalando paquetes base..."
-  yay_install git curl wget zsh neovim unzip p7zip tree fzf ripgrep bat exa htop btop nano
-  success "Paquetes base instalados."
-}
+  step "Actualizando sistema e instalando paquetes base"
+  sudo pacman -Syu --noconfirm
 
-# GNOME Keyring configuration (skipped if no graphical session)
-configure_gnome_keyring() {
-  if [ -n "$DISPLAY" ]; then
-    step "Configurando GNOME Keyring..."
-    yay_install gnome-keyring libsecret seahorse
-    mkdir -p ~/.config/systemd/user
-    systemctl --user enable gcr-ssh-agent.socket || true
-    systemctl --user start gcr-ssh-agent.socket || true
-    success "GNOME Keyring configurado."
-  else
-    log "Entorno sin interfaz gráfica, se omite GNOME Keyring."
-  fi
-}
-
-# Install Oh My Zsh
-install_oh_my_zsh() {
-  step "Instalando Oh My Zsh..."
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-    success "Oh My Zsh instalado."
-  else
-    log "Oh My Zsh ya está instalado."
-  fi
-}
-
-# Install Zsh plugins
-install_zsh_plugins() {
-  step "Instalando plugins de Zsh..."
-  mkdir -p ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
-
-  local plugins=(
-    "zsh-users/zsh-autosuggestions"
-    "zsh-users/zsh-syntax-highlighting"
-    "zsh-users/zsh-completions"
+  # Paquetes esenciales del sistema
+  local pkgs=(
+    git curl wget unzip tar base-devel
+    zsh zsh-completions
+    eza bat zoxide
+    docker docker-compose
+    teamviewer
+    audacity inkscape
+    oh-my-posh
   )
 
-  for repo in "${plugins[@]}"; do
-    local name=$(basename "$repo")
-    local path="${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/$name"
-    if [ ! -d "$path" ]; then
-      git clone https://github.com/$repo "$path"
-      log "Plugin $name instalado."
-    else
-      log "Plugin $name ya existe."
-    fi
-  done
-  success "Plugins de Zsh instalados."
-}
-
-# Install Oh My Posh
-install_oh_my_posh() {
-  step "Instalando Oh My Posh..."
-  yay_install oh-my-posh
-  mkdir -p ~/.poshthemes
-  curl -fsSL https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/jandedobbeleer.omp.json -o ~/.poshthemes/omarchy.omp.json
-  success "Oh My Posh instalado."
-}
-
-# Create .zshrc
-create_zshrc() {
-  step "Creando configuración de Zsh..."
-  cat > ~/.zshrc <<'EOF'
-# ================================================================
-# Omarchy Zsh Configuration
-# ================================================================
-
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="agnoster"
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-completions)
-source $ZSH/oh-my-zsh.sh
-
-# Aliases y extras
-alias ll='exa -lh --icons'
-alias la='exa -lha --icons'
-alias gs='git status'
-alias v='nvim'
-
-# Oh My Posh
-if command -v oh-my-posh &>/dev/null; then
-  eval "$(oh-my-posh init zsh --config ~/.poshthemes/omarchy.omp.json)"
-fi
-
-# PATH
-export PATH="$HOME/.local/bin:$PATH"
-EOF
-  success ".zshrc creado."
-}
-
-# Configure SSH
-configure_ssh() {
-  step "Configurando SSH..."
-  mkdir -p ~/.ssh
-  chmod 700 ~/.ssh
-  if [ ! -f ~/.ssh/id_ed25519 ]; then
-    ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ~/.ssh/id_ed25519 -N ""
-    success "Clave SSH generada."
+  # Instalar con yay o pacman dependiendo de la disponibilidad
+  if command -v yay &>/dev/null; then
+    yay -S --noconfirm "${pkgs[@]}"
   else
-    log "Clave SSH existente detectada."
+    sudo pacman -S --needed --noconfirm "${pkgs[@]}"
   fi
-  eval "$(ssh-agent -s)" >/dev/null
-  ssh-add ~/.ssh/id_ed25519 || true
-  for key in ~/.ssh/*.pub; do
-    log "Clave pública: $(cat $key)"
-  done
-  success "SSH configurado."
+
+  success "Paquetes base instalados correctamente."
 }
 
-# Final summary
-finish_installation() {
-  END_TIME=$(date +%s)
-  DURATION=$((END_TIME - START_TIME))
-  echo -e "\n${GREEN}Instalación completada.${NC}"
-  echo -e "Duración: ${DURATION}s"
-  echo -e "Logs: ${LOG_FILE}"
-  echo -e "Errores: ${ERROR_LOG}"
-  $NEEDS_REBOOT && echo -e "${YELLOW}Se recomienda reiniciar el sistema.${NC}"
-  echo -e "${BLUE}Para activar zsh como shell predeterminada, ejecuta:${NC} chsh -s $(which zsh)"
+# =============================================================================
+# FUNCIÓN: Configurar Docker
+# =============================================================================
+setup_docker() {
+  step "Configurando Docker y permisos de usuario"
+  sudo systemctl enable docker.service
+  sudo systemctl start docker.service
+
+  # Agregar usuario al grupo docker para evitar usar sudo
+  sudo usermod -aG docker "$USER"
+  success "Docker configurado. Recuerda cerrar y volver a iniciar sesión."
 }
 
-# ================================================================
-# MAIN EXECUTION FLOW
-# ================================================================
+# =============================================================================
+# FUNCIÓN: Instalar Oh My Zsh y plugins
+# =============================================================================
+install_ohmyzsh() {
+  step "Instalando Oh My Zsh y sus plugins"
 
-step "Verificando entorno y conexión..."
-check_internet
-install_yay
-install_base_packages
-configure_gnome_keyring
-install_oh_my_zsh
-install_zsh_plugins
-install_oh_my_posh
-create_zshrc
-configure_ssh
-finish_installation
+  if [ ! -d "$HOME/.oh-my-zsh" ]; then
+    # Instalar Oh My Zsh sin preguntar
+    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  else
+    log "Oh My Zsh ya está instalado, se omite."
+  fi
 
-success "Setup completo. Reinicia o ejecuta 'zsh' para aplicar cambios."
+  # Crear carpeta custom de plugins si no existe
+  mkdir -p "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins"
+
+  # Instalar plugins adicionales
+  git clone https://github.com/zsh-users/zsh-autosuggestions.git \
+    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" || true
+
+  git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \
+    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" || true
+
+  success "Oh My Zsh y plugins instalados correctamente."
+}
+
+# =============================================================================
+# FUNCIÓN: Descargar y aplicar el .zshrc personalizado
+# =============================================================================
+install_zshrc() {
+  step "Aplicando configuración personalizada de Zsh (.zshrc)"
+  local ZSHRC_URL="https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/.zshrc"
+  local DEST="$HOME/.zshrc"
+
+  # Backup del anterior
+  if [ -f "$DEST" ]; then
+    cp "$DEST" "${DEST}.backup.$(date +%Y%m%d_%H%M%S)"
+    log "Backup del .zshrc existente creado."
+  fi
+
+  # Descargar el nuevo
+  if curl -fsSL "$ZSHRC_URL" -o "$DEST"; then
+    success "Nuevo .zshrc instalado desde GitHub."
+  else
+    error "Fallo al descargar .zshrc desde $ZSHRC_URL"
+  fi
+
+  # Cambiar shell por defecto a zsh
+  chsh -s "$(which zsh)" "$USER" || true
+}
+
+# =============================================================================
+# FUNCIÓN: Configurar TeamViewer (servicio)
+# =============================================================================
+setup_teamviewer() {
+  step "Configurando TeamViewer"
+  sudo systemctl enable teamviewerd.service
+  sudo systemctl start teamviewerd.service
+  success "TeamViewer habilitado y activo."
+}
+
+# =============================================================================
+# FUNCIÓN: Instalación de fuentes y temas (opcional)
+# =============================================================================
+install_fonts() {
+  step "Instalando fuentes para Oh My Posh y terminal"
+  local FONTS_DIR="$HOME/.local/share/fonts"
+  mkdir -p "$FONTS_DIR"
+
+  # Ejemplo: instalar JetBrainsMono Nerd Font
+  if [ ! -f "$FONTS_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
+    curl -fsSL -o "$FONTS_DIR/JetBrainsMonoNerdFont-Regular.ttf" \
+      "https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/JetBrainsMono/Regular/complete/JetBrains%20Mono%20Nerd%20Font%20Complete.ttf"
+    fc-cache -f
+  fi
+
+  success "Fuentes Nerd instaladas."
+}
+
+# =============================================================================
+# FUNCIÓN: Limpieza y resumen final
+# =============================================================================
+finish_setup() {
+  step "Finalizando configuración"
+
+  echo -e "\n${GREEN}🎉 Instalación completada correctamente.${RESET}"
+  echo -e "Reinicia tu sesión o ejecuta ${YELLOW}zsh${RESET} para activar la configuración."
+  echo -e "\nVerifica:"
+  echo " - Docker: 'docker ps'"
+  echo " - Zsh funcionando con Oh My Posh"
+  echo " - TeamViewer corriendo (teamviewer info)"
+  echo -e "\n🚀 ¡Listo para usar Omarchy en todo su esplendor!"
+}
+
+# =============================================================================
+# MAIN
+# =============================================================================
+main() {
+  check_internet
+  install_base_packages
+  setup_docker
+  install_ohmyzsh
+  install_zshrc
+  setup_teamviewer
+  install_fonts
+  finish_setup
+}
+
+main "$@"
