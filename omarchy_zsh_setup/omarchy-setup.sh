@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-#     Omarchy Setup Script v2.5 (Omarchy-MG Edition)
+#     Omarchy Setup Script v2.6 (Omarchy-MG Edition) - Arch Update
 #     Autor: Marco G. / 2025
 #     Descripción:
 #       Script de automatización para configurar un entorno Zsh completo
-#       con Oh My Zsh, Oh My Posh, Docker, TeamViewer, Inkscape, Audacity,
-#       y utilidades esenciales. Compatible con Arch Linux.
+#       con Oh My Zsh, Oh My Posh (tema Catppuccin Frappe), Docker, TeamViewer,
+#       Inkscape, Audacity, speedtest-cli y utilidades esenciales.
 # =============================================================================
 
 set -euo pipefail
@@ -24,7 +24,7 @@ error()   { echo -e "${RED}✗ $1${RESET}" >&2; }
 log()     { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
 
 # =============================================================================
-# FUNCIÓN: Verificar conexión a Internet
+# FUNCIONES PRINCIPALES
 # =============================================================================
 check_internet() {
   step "Verificando conexión a Internet..."
@@ -35,102 +35,71 @@ check_internet() {
   success "Conexión a Internet verificada."
 }
 
-# =============================================================================
-# FUNCIÓN: Actualizar sistema y dependencias base
-# =============================================================================
 install_base_packages() {
   step "Actualizando sistema e instalando paquetes base"
   sudo pacman -Syu --noconfirm
 
-  # Paquetes esenciales del sistema
-  local pkgs=(
-    git curl wget unzip tar base-devel
-    zsh zsh-completions
-    eza bat zoxide
-    docker docker-compose
-    teamviewer
-    audacity inkscape
-    oh-my-posh
-  )
+  local pkgs=(git curl wget unzip tar base-devel zsh zsh-completions eza bat zoxide docker docker-compose teamviewer audacity inkscape oh-my-posh python-pip)
 
-  # Instalar con yay o pacman dependiendo de la disponibilidad
   if command -v yay &>/dev/null; then
     yay -S --noconfirm "${pkgs[@]}"
   else
     sudo pacman -S --needed --noconfirm "${pkgs[@]}"
   fi
 
-  success "Paquetes base instalados correctamente."
+  # Instalar speedtest-cli si no está presente
+  if ! command -v speedtest &>/dev/null; then
+    sudo pip install speedtest-cli
+  fi
+
+  success "Paquetes base y speedtest-cli instalados correctamente."
 }
 
-# =============================================================================
-# FUNCIÓN: Configurar Docker
-# =============================================================================
 setup_docker() {
   step "Configurando Docker y permisos de usuario"
   sudo systemctl enable docker.service
   sudo systemctl start docker.service
-
-  # Agregar usuario al grupo docker para evitar usar sudo
   sudo usermod -aG docker "$USER"
   success "Docker configurado. Recuerda cerrar y volver a iniciar sesión."
 }
 
-# =============================================================================
-# FUNCIÓN: Instalar Oh My Zsh y plugins
-# =============================================================================
 install_ohmyzsh() {
   step "Instalando Oh My Zsh y sus plugins"
-
   if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    # Instalar Oh My Zsh sin preguntar
-    RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   else
     log "Oh My Zsh ya está instalado, se omite."
   fi
 
-  # Crear carpeta custom de plugins si no existe
   mkdir -p "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins"
-
-  # Instalar plugins adicionales
-  git clone https://github.com/zsh-users/zsh-autosuggestions.git \
-    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" || true
-
-  git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \
-    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" || true
-
+  git clone https://github.com/zsh-users/zsh-autosuggestions.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" || true
+  git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" || true
   success "Oh My Zsh y plugins instalados correctamente."
 }
 
-# =============================================================================
-# FUNCIÓN: Descargar y aplicar el .zshrc personalizado
-# =============================================================================
-install_zshrc() {
-  step "Aplicando configuración personalizada de Zsh (.zshrc)"
+install_zshrc_and_posh_theme() {
+  step "Aplicando configuración personalizada de Zsh (.zshrc) y tema Catppuccin Frappe"
   local ZSHRC_URL="https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_zsh_setup/.zshrc"
   local DEST="$HOME/.zshrc"
 
-  # Backup del anterior
   if [ -f "$DEST" ]; then
     cp "$DEST" "${DEST}.backup.$(date +%Y%m%d_%H%M%S)"
     log "Backup del .zshrc existente creado."
   fi
 
-  # Descargar el nuevo
   if curl -fsSL "$ZSHRC_URL" -o "$DEST"; then
     success "Nuevo .zshrc instalado desde GitHub."
   else
     error "Fallo al descargar .zshrc desde $ZSHRC_URL"
   fi
 
-  # Cambiar shell por defecto a zsh
+  mkdir -p ~/.poshthemes
+  wget https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/catppuccin_frappe.omp.json -O ~/.poshthemes/catppuccin.omp.json
+  success "Tema Catppuccin Frappe descargado en ~/.poshthemes/"
+
   chsh -s "$(which zsh)" "$USER" || true
 }
 
-# =============================================================================
-# FUNCIÓN: Configurar TeamViewer (servicio)
-# =============================================================================
 setup_teamviewer() {
   step "Configurando TeamViewer"
   sudo systemctl enable teamviewerd.service
@@ -138,36 +107,27 @@ setup_teamviewer() {
   success "TeamViewer habilitado y activo."
 }
 
-# =============================================================================
-# FUNCIÓN: Instalación de fuentes y temas (opcional)
-# =============================================================================
 install_fonts() {
   step "Instalando fuentes para Oh My Posh y terminal"
   local FONTS_DIR="$HOME/.local/share/fonts"
   mkdir -p "$FONTS_DIR"
-
-  # Ejemplo: instalar JetBrainsMono Nerd Font
   if [ ! -f "$FONTS_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
     curl -fsSL -o "$FONTS_DIR/JetBrainsMonoNerdFont-Regular.ttf" \
       "https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/JetBrainsMono/Regular/complete/JetBrains%20Mono%20Nerd%20Font%20Complete.ttf"
     fc-cache -f
   fi
-
   success "Fuentes Nerd instaladas."
 }
 
-# =============================================================================
-# FUNCIÓN: Limpieza y resumen final
-# =============================================================================
 finish_setup() {
   step "Finalizando configuración"
-
   echo -e "\n${GREEN}🎉 Instalación completada correctamente.${RESET}"
   echo -e "Reinicia tu sesión o ejecuta ${YELLOW}zsh${RESET} para activar la configuración."
   echo -e "\nVerifica:"
   echo " - Docker: 'docker ps'"
   echo " - Zsh funcionando con Oh My Posh"
   echo " - TeamViewer corriendo (teamviewer info)"
+  echo " - speedtest-cli: 'speedtest'"
   echo -e "\n🚀 ¡Listo para usar Omarchy en todo su esplendor!"
 }
 
@@ -179,7 +139,7 @@ main() {
   install_base_packages
   setup_docker
   install_ohmyzsh
-  install_zshrc
+  install_zshrc_and_posh_theme
   setup_teamviewer
   install_fonts
   finish_setup
