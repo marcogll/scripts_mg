@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-#     Omarchy Setup Script v2.8.1 (Omarchy-MG Fusión)
+#     Omarchy Setup Script v2.8.3 (Omarchy-MG Fusión)
 #     Autor: Marco G. / 2025
 #     Descripción:
-#       Script unificado que combina la estética Catppuccin de la v2.8 con la
-#       robustez, interactividad y el conjunto completo de características de la v2.3.
-#       Instala un entorno Zsh completo, utilidades de desarrollo, Docker,
-#       TeamViewer, ZeroTier y configura GNOME Keyring y SSH.
+#       Versión unificada que combina la estética Catppuccin con la robustez
+#       y características de versiones anteriores.
+#       Omite la instalación automática de Nerd Fonts a petición del usuario.
 # =============================================================================
 
 set -euo pipefail
@@ -24,7 +23,7 @@ RED="\e[38;5;203m"
 BLUE="\e[38;5;75m"
 RESET="\e[0m"
 
-TOTAL_STEPS=12
+TOTAL_STEPS=11 # Se redujo el número de pasos
 CURRENT_STEP=0
 NEEDS_REBOOT=false
 LOG_FILE="$HOME/omarchy-setup.log"
@@ -39,7 +38,7 @@ setup_logging() {
     exec > >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$ERROR_LOG" >&2)
     echo "==================================================================="
-    echo "OMARCHY SETUP v2.8.1 - $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "OMARCHY SETUP v2.8.3 - $(date '+%Y-%m-%d %H:%M:%S')"
     echo "==================================================================="
 }
 
@@ -49,7 +48,7 @@ log_error() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2; }
 print_header() {
     clear
     echo -e "${MAUVE}╔════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${MAUVE}║${RESET}         ${PEACH}OMARCHY SETUP v2.8.1 - Edición Fusión${RESET}             ${MAUVE}║${RESET}"
+    echo -e "${MAUVE}║${RESET}         ${PEACH}OMARCHY SETUP v2.8.3 - Edición Fusión${RESET}             ${MAUVE}║${RESET}"
     echo -e "${MAUVE}╚════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
     echo -e "${TEAL}Logs:${RESET} $LOG_FILE"
@@ -190,19 +189,6 @@ setup_teamviewer() {
     NEEDS_REBOOT=true
 }
 
-install_fonts() {
-    step "Instalando Nerd Fonts para la terminal"
-    local FONTS_DIR="$HOME/.local/share/fonts"
-    mkdir -p "$FONTS_DIR"
-    if [ ! -f "$FONTS_DIR/JetBrainsMonoNerdFont-Regular.ttf" ]; then
-        info "Descargando JetBrains Mono Nerd Font..."
-        curl -fsSL -o "$FONTS_DIR/JetBrainsMonoNerdFont-Regular.ttf" \
-          "https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/JetBrainsMono/Regular/complete/JetBrains%20Mono%20Nerd%20Font%20Complete.ttf"
-        fc-cache -f
-    fi
-    success "Nerd Fonts instaladas."
-}
-
 install_zerotier() {
     step "Configurando ZeroTier One"
     if ! command -v zerotier-cli &> /dev/null; then
@@ -271,8 +257,10 @@ final_message() {
 
     echo -e "${TEAL}Próximos pasos:${RESET}"
     echo "  1. ${YELLOW}CIERRA Y VUELVE A ABRIR LA TERMINAL${RESET} o reinicia tu sesión para usar Zsh."
-    echo "  2. La primera vez que uses una clave SSH, se te pedirá la contraseña para guardarla en el Keyring."
-    echo "  3. Comandos para verificar: 'docker ps', 'teamviewer info', 'speedtest', 'zsh'."
+    echo "  2. ${PEACH}NOTA:${RESET} La instalación de fuentes fue omitida. Asegúrate de tener una 'Nerd Font'"
+    echo "     instalada manualmente para que los iconos del prompt se vean correctamente."
+    echo "  3. La primera vez que uses una clave SSH, se te pedirá la contraseña para guardarla en el Keyring."
+    echo "  4. Comandos para verificar: 'docker ps', 'teamviewer info', 'speedtest', 'zsh'."
     echo -e "\n${MAUVE}🚀 ¡Listo para usar Omarchy con la paleta Catppuccin!${RESET}"
 }
 
@@ -290,7 +278,6 @@ main() {
     install_ohmyzsh
     install_zshrc_and_posh_theme
     setup_teamviewer
-    install_fonts
     
     # Módulos opcionales
     install_zerotier
