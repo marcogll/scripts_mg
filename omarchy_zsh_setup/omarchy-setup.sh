@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#     Omarchy Setup Script v2.6 (Omarchy-MG Edition) - Arch Update
+#     Omarchy Setup Script v2.8 (Omarchy-MG Edition) - Arch Update con Catppuccin Colors
 #     Autor: Marco G. / 2025
 #     Descripción:
 #       Script de automatización para configurar un entorno Zsh completo
@@ -11,11 +11,16 @@
 set -euo pipefail
 
 # =============================================================================
-# COLORES Y UTILIDADES DE LOGGING
+# COLORES Y UTILIDADES DE LOGGING (Catppuccin Palette)
 # =============================================================================
-GREEN="\e[32m"
-YELLOW="\e[33m"
-RED="\e[31m"
+FLAMINGO="\e[38;5;245m"   # rosa suave
+MAUVE="\e[38;5;140m"      # morado
+PEACH="\e[38;5;215m"       # durazno
+GREEN="\e[38;5;121m"      # verde claro
+TEAL="\e[38;5;80m"         # teal
+YELLOW="\e[38;5;229m"      # amarillo suave
+RED="\e[38;5;203m"         # rojo coral
+BLUE="\e[38;5;75m"         # azul suave
 RESET="\e[0m"
 
 step()    { echo -e "\n${YELLOW}→ $1${RESET}"; sleep 0.3; }
@@ -49,7 +54,7 @@ install_base_packages() {
 
   # Instalar speedtest-cli si no está presente
   if ! command -v speedtest &>/dev/null; then
-    sudo pip install speedtest-cli
+    sudo pip install --break-system-packages speedtest-cli || true
   fi
 
   success "Paquetes base y speedtest-cli instalados correctamente."
@@ -128,7 +133,7 @@ finish_setup() {
   echo " - Zsh funcionando con Oh My Posh"
   echo " - TeamViewer corriendo (teamviewer info)"
   echo " - speedtest-cli: 'speedtest'"
-  echo -e "\n🚀 ¡Listo para usar Omarchy en todo su esplendor!"
+  echo -e "\n🚀 ¡Listo para usar Omarchy con paleta Catppuccin!"
 }
 
 # =============================================================================
