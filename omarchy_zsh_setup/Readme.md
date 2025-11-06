@@ -9,7 +9,8 @@ Esta versión automatiza la configuración de entorno, fuentes, temas, herramien
 ## ⚡ Instalación rápida
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/main/omarchy_setup/omarchy_setup_2.9.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/marcogll/scripts_mg/refs/heads/main/omarchy_zsh_setup/omarchy-setup.sh)
+
 ```
 
 ---
