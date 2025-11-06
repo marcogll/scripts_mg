@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ===============================================================
-# 🧠 Omarchy Setup Script v2.9 — Intel Edition
+# 🧠 Omarchy Setup Script v3.0 — Intel Edition
 # ---------------------------------------------------------------
 # Autor: Marco G.
 # Descripción:
 #   Prepara un entorno completo de trabajo con Zsh, Oh My Zsh,
 #   Oh My Posh, Homebrew, herramientas de desarrollo, codecs Intel,
-#   drivers Epson, Logitech y utilidades varias.
+#   drivers Epson, Logitech, VLC y utilidades varias.
 #   Este script NO instala DaVinci Resolve, solo deja el sistema listo.
 # ===============================================================
 
@@ -21,7 +21,7 @@ trap 'echo "❌ Error en la línea $LINENO. Abortando instalación."; exit 1' ER
 # ---------------------------------------------------------------
 cat << "EOF"
 ╔═════════════════════════════════════════════════════╗
-║         🧠 Omarchy System Setup  v2.9               ║
+║         🧠 Omarchy System Setup  v3.0               ║
 ║            Intel Iris Xe • Arch Linux               ║
 ╚═════════════════════════════════════════════════════╝
 EOF
@@ -52,6 +52,22 @@ sudo pacman -S --needed --noconfirm \
   libvdpau-va-gl libva-utils \
   gstreamer gst-libav gst-plugins-good gst-plugins-bad gst-plugins-ugly \
   ffmpeg opencl-clang intel-compute-runtime clinfo
+
+# ---------------------------------------------------------------
+# 🎵 Instalación de VLC + codecs + configuración predeterminada
+# ---------------------------------------------------------------
+echo "🎶 Instalando VLC y codecs multimedia..."
+sudo pacman -S --needed --noconfirm vlc
+
+# Establecer VLC como reproductor predeterminado de audio y video
+echo "⚙️ Configurando VLC como reproductor predeterminado..."
+xdg-mime default vlc.desktop audio/mpeg
+xdg-mime default vlc.desktop audio/x-wav
+xdg-mime default vlc.desktop audio/flac
+xdg-mime default vlc.desktop video/mp4
+xdg-mime default vlc.desktop video/x-matroska
+xdg-mime default vlc.desktop video/x-msvideo
+xdg-mime default vlc.desktop video/x-ms-wmv
 
 # ---------------------------------------------------------------
 # 🧾 Impresoras Epson (L4150 + Epson Scan2)
@@ -128,7 +144,7 @@ if [ -t 1 ] && [ -z "$ZSH_VERSION" ]; then
 fi
 
 # Inicializar Homebrew
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+eval "$($(brew --prefix)/bin/brew shellenv)"
 EOBASH
 
 # ---------------------------------------------------------------
@@ -144,7 +160,7 @@ sudo systemctl enable --now gnome-keyring-daemon.service || true
 # ---------------------------------------------------------------
 cat << "EOF"
 ╔═══════════════════════════════════════════════════════════╗
-║  ✅ Sistema preparado con éxito — Omarchy Setup v2.9       ║
+║  ✅ Sistema preparado con éxito — Omarchy Setup v3.0       ║
 ║  Reinicia tu sesión o ejecuta 'exec zsh' para aplicar todo ║
 ║  Luego copia tu archivo .zshrc de Omarchy v2.1.            ║
 ╚═══════════════════════════════════════════════════════════╝
